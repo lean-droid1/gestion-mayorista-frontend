@@ -1,4 +1,4 @@
-import{useState,useEffect,useMemo,useCallback,useRef,memo,createContext,useContext}from"react";
+import React,{useState,useEffect,useMemo,useCallback,useRef,memo,createContext,useContext}from"react";
 import{Search,ShoppingCart,User,LogOut,Package,Settings,Eye,EyeOff,Edit2,Trash2,Plus,Minus,Phone,Truck,Store,Users,DollarSign,AlertTriangle,Check,X,Menu,Filter,ClipboardList,Save,ChevronDown,ChevronRight,RefreshCw,UserPlus,Clock,Shield,BarChart3,Loader2,ArrowLeft,Percent,Upload,Printer,Download,Share2,TrendingUp,Mail,MapPin,FileText,Zap}from"lucide-react";
 import*as XLSX from"xlsx";
 import*as API from"./api";
@@ -10,6 +10,8 @@ const fmtARS=n=>"$"+Number(n||0).toLocaleString("es-AR",{minimumFractionDigits:0
 const getPrice=(base,lista,pfMap,pid)=>{const k=`${pid}_${lista?.id}`;if(pfMap[k]!=null&&pfMap[k]>0)return pfMap[k];return Math.round((Number(base)||0)*(lista?.multiplicador||1)*100)/100;};
 const extractBrand=cat=>{const u=(cat||"").toUpperCase();for(const b of BRAND_KEYS)if(u.includes(b))return b;return"OTROS";};
 const getCatColor=cat=>{const l=(cat||"").toLowerCase();for(const[k,c]of Object.entries(CAT_COLORS))if(l.includes(k))return c;return"#64748b";};
+const openWA=(number,text)=>{const a=document.createElement("a");a.href=`https://wa.me/${number}?text=${encodeURIComponent(text)}`;a.target="_blank";a.rel="noopener noreferrer";document.body.appendChild(a);a.click();document.body.removeChild(a);};
+const LISTA_COLORS=["#2563eb","#7c3aed","#059669","#d97706","#dc2626","#6366f1","#0891b2","#84cc16"];
 const Ctx=createContext();
 
 /* ═══ STABLE COMPONENTS ═══ */
@@ -121,41 +123,44 @@ function UserModal({u,isNew,onClose}){
   const{listas,showToast,refreshAdmin}=useContext(Ctx);
   const isPending=u?.estado==="pendiente";
   const[f,setF]=useState(isNew
-    ?{nombre:"",usuario:"",password:"",telefono:"",email:"",direccion:"",rol:"client",lista_precio_id:listas[0]?.id||""}
-    :{nombre:u?.nombre||"",usuario:u?.usuario||"",password:"",telefono:u?.telefono||"",email:u?.email||"",direccion:u?.direccion||"",rol:u?.rol||"client",lista_precio_id:u?.lista_precio_id||listas[0]?.id||""});
+    ?{nombre:"",usuario:"",password:"",telefono:"",email:"",direccion:"",rol:"cliente",lista_precio_id:listas[0]?.id||""}
+    :{nombre:u?.nombre||"",usuario:u?.usuario||"",password:"",telefono:u?.telefono||"",email:u?.email||"",direccion:u?.direccion||"",rol:u?.rol||"cliente",lista_precio_id:u?.lista_precio_id||listas[0]?.id||"",activo:u?.activo??true});
   const[sv,setSv]=useState(false);
   const save=async()=>{if(!f.nombre||!f.usuario){showToast("Nombre y usuario obligatorios");return;}setSv(true);try{
-    const datos=isNew?{...f,activo:true}:{...u,...f,activo:u?.activo??true};delete datos.id;delete datos.created_at;delete datos.updated_at;if(!datos.password)delete datos.password;
+    const datos=isNew?{...f,activo:true}:{...u,...f};delete datos.id;delete datos.created_at;delete datos.updated_at;delete datos.estado;if(!datos.password)delete datos.password;
     if(isNew)await API.register(datos);else await API.updateUsuario(u.id,datos);
     showToast(isNew?"Creado":"Actualizado");onClose();await refreshAdmin();
   }catch(e){showToast("Error: "+e.message);}setSv(false);};
-  const aprobar=async lid=>{setSv(true);try{await API.aprobarUsuario(u.id,lid);showToast("Aprobado");
+  const aprobar=async lid=>{setSv(true);try{await API.aprobarUsuario(u.id,lid);showToast("Aprobado ✅");
     if(u.telefono){const msg=`Hola ${u.nombre}, tu cuenta en ${document.title||"el catálogo"} ya está activa. Tu usuario es: *${u.usuario}*`;openWA(`54${u.telefono.replace(/\D/g,"")}`,msg);}
     onClose();await refreshAdmin();}catch(e){showToast("Error: "+e.message);}setSv(false);};
   const rechazar=async()=>{setSv(true);try{await API.rechazarUsuario(u.id);showToast("Rechazado");onClose();await refreshAdmin();}catch(e){showToast("Error: "+e.message);}setSv(false);};
   return(<div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={e=>e.target===e.currentTarget&&onClose()}>
     <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl p-4 space-y-3 max-h-[90vh] overflow-y-auto">
-      <div className="flex justify-between items-center"><h3 className="font-bold">{isNew?"Nuevo usuario":isPending?"Aprobar":"Editar usuario"}</h3><button onClick={onClose}><X className="w-5 h-5"/></button></div>
-      {isPending&&<div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800"><Clock className="w-4 h-4 inline mr-1"/>Pendiente</div>}
+      <div className="flex justify-between items-center"><h3 className="font-bold">{isNew?"Nuevo usuario":isPending?"Revisar usuario":"Editar usuario"}</h3><button onClick={onClose}><X className="w-5 h-5"/></button></div>
+      {isPending&&<div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800"><Clock className="w-4 h-4 inline mr-1"/>Pendiente de aprobación</div>}
       {!isNew&&<div className="bg-slate-50 rounded-xl p-3"><p className="font-semibold">{u.nombre}</p><p className="text-sm text-slate-500">@{u.usuario} {u.telefono?`• ${u.telefono}`:""} {u.email?`• ${u.email}`:""}</p></div>}
-      {isPending?(<div className="space-y-3"><label className="text-sm font-medium block">Asignar lista:</label>
-        {listas.map(l=><button key={l.id} onClick={()=>aprobar(l.id)} disabled={sv} className="w-full py-2.5 border rounded-xl text-sm font-medium flex items-center justify-between px-3 hover:bg-blue-50 disabled:opacity-50">
-          <span style={{color:l.color}}>{l.nombre}</span><span className="text-xs text-slate-400">{l.modo==="porcentaje"?`+${Math.round((l.multiplicador-1)*100)}%`:`×${l.multiplicador}`}</span></button>)}
-        <button onClick={rechazar} disabled={sv} className="w-full py-2.5 bg-red-50 text-red-600 rounded-xl text-sm font-medium">Rechazar</button></div>
-      ):(<div className="space-y-3">
+      {/* Approve section for pending */}
+      {isPending&&<div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2">
+        <label className="text-sm font-semibold text-blue-800 block">✅ Aprobar con lista:</label>
+        <div className="grid grid-cols-2 gap-1.5">{listas.map(l=><button key={l.id} onClick={()=>aprobar(l.id)} disabled={sv} className="py-2 border rounded-lg text-xs font-medium hover:bg-blue-100 disabled:opacity-50 truncate px-2" style={{color:l.color,borderColor:l.color+"40"}}>
+          {l.nombre} <span className="text-slate-400">+{Math.round((l.multiplicador-1)*100)}%</span></button>)}</div>
+        <button onClick={rechazar} disabled={sv} className="w-full py-2 bg-red-50 text-red-600 rounded-lg text-xs font-medium mt-1">❌ Rechazar</button></div>}
+      {/* Edit form — always shown */}
+      <div className="space-y-3">
         <input className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Nombre completo *" value={f.nombre} onChange={e=>setF({...f,nombre:e.target.value})}/>
         <input className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Usuario *" value={f.usuario} onChange={e=>setF({...f,usuario:e.target.value})}/>
         <input type="password" className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder={isNew?"Contraseña *":"Nueva contraseña (vacío=no cambiar)"} value={f.password} onChange={e=>setF({...f,password:e.target.value})}/>
         <input className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Teléfono / WhatsApp *" value={f.telefono} onChange={e=>setF({...f,telefono:e.target.value})}/>
         <input type="email" className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Email *" value={f.email} onChange={e=>setF({...f,email:e.target.value})}/>
         <input className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Dirección" value={f.direccion} onChange={e=>setF({...f,direccion:e.target.value})}/>
-        <select className="w-full px-3 py-2.5 border rounded-xl text-sm" value={f.rol} onChange={e=>setF({...f,rol:e.target.value})}><option value="client">Cliente</option><option value="admin">Admin</option></select>
+        <select className="w-full px-3 py-2.5 border rounded-xl text-sm" value={f.rol} onChange={e=>setF({...f,rol:e.target.value})}><option value="cliente">Cliente</option><option value="admin">Admin</option></select>
         <select className="w-full px-3 py-2.5 border rounded-xl text-sm" value={f.lista_precio_id} onChange={e=>setF({...f,lista_precio_id:e.target.value})}>
           {listas.map(l=><option key={l.id} value={l.id}>{l.nombre}</option>)}</select>
         {!isNew&&<label className="flex items-center gap-3 py-2 cursor-pointer"><input type="checkbox" checked={f.activo!==false&&f.activo!=="false"} onChange={e=>setF({...f,activo:e.target.checked})} className="w-5 h-5 rounded"/>
           <span className="text-sm font-medium">{f.activo!==false&&f.activo!=="false"?"✅ Cuenta activa":"🔴 Cuenta suspendida"}</span></label>}
-        <button onClick={save} disabled={sv} className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl disabled:opacity-50">{sv?"Guardando...":"Guardar"}</button>
-      </div>)}
+        <button onClick={save} disabled={sv} className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl disabled:opacity-50">{sv?"Guardando...":"Guardar datos"}</button>
+      </div>
     </div></div>);
 }
 
@@ -225,11 +230,17 @@ function OrderDetailModal({order,onClose,onUpdate,onPrint,onClone}){
         <div className="flex items-center gap-2">{!editing&&<button onClick={()=>setEditing(true)} className="text-xs px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full font-medium flex items-center gap-1"><Edit2 className="w-3 h-3"/>Editar</button>}
           <button onClick={onClose}><X className="w-5 h-5"/></button></div></div>
       <div className="p-4 space-y-3">
-        <div className="flex justify-between items-start"><div><p className="font-semibold">{o.usuario_nombre||"—"}</p>
-          <p className="text-xs text-slate-500">{new Date(o.fecha||o.created_at).toLocaleString("es-AR")}</p>
-          <p className="text-xs text-slate-500">{o.tipo_entrega==="retiro"?"📦 Retiro":"🚚 Envío"} {o.direccion||""}</p></div>
-          <div className="text-right"><p className="text-xl font-bold text-blue-600">{editing?fmt(editTotal):fmt(o.total)}</p><StatusBadge status={o.estado}/>
-            <p className={`text-xs font-medium mt-1 ${o.estado_pago==="pagado"?"text-emerald-600":"text-red-500"}`}>{o.estado_pago==="pagado"?"💰 Pagado":"⏳ Impago"}</p></div></div>
+        {/* Customer info + WhatsApp */}
+        <div className="flex items-center justify-between bg-slate-50 rounded-xl p-3">
+          <div className="min-w-0 flex-1"><p className="font-semibold text-sm truncate">{o.usuario_nombre||o.cliente_nombre||"—"}</p>
+            <p className="text-xs text-slate-500">{new Date(o.fecha||o.created_at).toLocaleString("es-AR")} • {o.tipo_entrega==="retiro"?"📦 Retiro":"🚚 Envío"} {o.direccion_envio||""}</p>
+            {(o.usuario_telefono||o.cliente_telefono)&&<p className="text-xs text-slate-500">📞 {o.usuario_telefono||o.cliente_telefono}</p>}</div>
+          {(o.usuario_telefono||o.cliente_telefono)&&<button onClick={()=>{const tel=(o.usuario_telefono||o.cliente_telefono||"").replace(/\D/g,"");const num=tel.startsWith("54")?tel:`54${tel}`;openWA(num,`Hola ${o.usuario_nombre||o.cliente_nombre||""}, respecto a tu pedido ${orderNum}:`);}}
+            className="ml-2 p-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shrink-0"><Phone className="w-4 h-4"/></button>}
+        </div>
+        <div className="flex justify-between items-center"><p className="text-xl font-bold text-blue-600">{editing?fmt(editTotal):fmt(o.total)}</p>
+          <div className="flex items-center gap-2"><StatusBadge status={o.estado}/>
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${o.estado_pago==="pagado"?"bg-emerald-100 text-emerald-700":"bg-red-100 text-red-600"}`}>{o.estado_pago==="pagado"?"💰 Pagado":"⏳ Impago"}</span></div></div>
         <div className="flex gap-2"><button onClick={()=>onUpdate(o.id,{estado_pago:o.estado_pago==="pagado"?"pendiente":"pagado"})}
           className={`flex-1 py-2 rounded-xl text-sm font-medium border-2 ${o.estado_pago==="pagado"?"border-emerald-500 bg-emerald-50 text-emerald-700":"border-red-300 bg-red-50 text-red-600"}`}>
           {o.estado_pago==="pagado"?"✅ Pagado — marcar impago":"❌ Impago — marcar pagado"}</button></div>
@@ -251,16 +262,21 @@ function OrderDetailModal({order,onClose,onUpdate,onPrint,onClone}){
                 <span className="text-xs text-slate-400">{p.categoria}</span> — <span className="font-medium">{p.modelo}</span></button>)}</div>}</div>
           <div className="flex gap-2"><button onClick={saveEdit} disabled={saving||!items.length} className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-1.5">
               {saving?<Loader2 className="w-4 h-4 animate-spin"/>:<Save className="w-4 h-4"/>}{saving?"Guardando...":"Guardar cambios"}</button>
-            <button onClick={()=>{setItems((o.items||[]).map(i=>({...i,qty:i.cantidad||i.qty||1})));setEditing(false);}} className="py-2.5 px-4 bg-slate-100 rounded-xl text-sm">Cancelar</button></div>
+            <button onClick={()=>{setItems(items.map(i=>({...i})));setEditing(false);}} className="py-2.5 px-4 bg-slate-100 rounded-xl text-sm">Cancelar</button></div>
         </div>
         :<table className="w-full text-sm"><thead><tr className="border-b"><th className="text-left py-1">Producto</th><th className="text-center">Cant</th><th className="text-right">Subtotal</th></tr></thead>
           <tbody>{items.map((i,idx)=><tr key={idx} className="border-b border-slate-50"><td className="py-1.5">{itemName(i)}</td>
             <td className="text-center">{i.cantidad||i.qty}</td><td className="text-right">{fmt((Number(i.precio_unitario)||0)*(i.cantidad||i.qty))}</td></tr>)}</tbody></table>}
 
-        {!editing&&<><div className="flex gap-2 flex-wrap">
-          {["pendiente","preparando","listo","entregado","cancelado"].filter(s=>s!==o.estado).map(s=>
-            <button key={s} onClick={()=>onUpdate(o.id,{estado:s})} className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-medium">→ {s}</button>)}
-          <button onClick={()=>onClone(o)} className="px-2 py-1 rounded-lg bg-blue-50 text-xs font-medium text-blue-600">Repetir</button></div>
+        {/* Status flow indicator + actions */}
+        {!editing&&<>{o.estado!=="cancelado"&&<div className="flex items-center gap-0.5 bg-slate-50 rounded-xl p-2">
+          {["pendiente","preparando","listo","entregado"].map((s,idx)=>{const steps=["pendiente","preparando","listo","entregado"];const ci=steps.indexOf(o.estado);const si=steps.indexOf(s);const isActive=si<=ci;const isCurrent=s===o.estado;
+            return<React.Fragment key={s}>{idx>0&&<div className={`flex-1 h-0.5 ${si<=ci?"bg-blue-500":"bg-slate-200"}`}/>}
+              <button onClick={()=>{if(s!==o.estado)onUpdate(o.id,{estado:s});}}
+                className={`px-2 py-1.5 rounded-lg text-[10px] font-semibold whitespace-nowrap transition-all ${isCurrent?"bg-blue-600 text-white shadow-sm":isActive?"bg-blue-100 text-blue-700":"bg-slate-100 text-slate-400 hover:bg-slate-200"}`}>{s}</button></React.Fragment>})}</div>}
+          <div className="flex gap-2">{o.estado!=="cancelado"?<button onClick={()=>onUpdate(o.id,{estado:"cancelado"})} className="px-3 py-1.5 rounded-lg bg-red-50 text-red-600 text-xs font-medium hover:bg-red-100">✕ Cancelar pedido</button>
+            :<button onClick={()=>onUpdate(o.id,{estado:"pendiente"})} className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium">↩ Reactivar</button>}
+            <button onClick={()=>onClone(o)} className="px-3 py-1.5 rounded-lg bg-blue-50 text-xs font-medium text-blue-600">Repetir</button></div>
         <div className="flex gap-2">
           {["A4","80mm","50mm","100mm"].map(f=><button key={f} onClick={()=>onPrint(o,f)} className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-medium flex items-center justify-center gap-1"><Printer className="w-3 h-3"/>{f}</button>)}</div></>}
       </div></div></div>);
@@ -386,7 +402,7 @@ export default function App(){
   useEffect(()=>{const p=new URLSearchParams(window.location.search);const cd=p.get("cart");if(cd){try{setCart(JSON.parse(atob(cd)));window.history.replaceState({},"",window.location.pathname);}catch{}};},[]);
 
   const loadCoreData=async()=>{try{const[cats,listasD,cfgD]=await Promise.all([API.getCategorias().catch(()=>[]),user?API.getListas().catch(()=>[]):Promise.resolve([]),user?API.getConfig().catch(()=>({})):Promise.resolve({})]);
-    setCategorias(Array.isArray(cats)?cats:[]);if(listasD.length)setListas(listasD);
+    setCategorias(Array.isArray(cats)?cats:[]);if(listasD.length)setListas(listasD.map((l,i)=>({...l,multiplicador:l.multiplicador||(1+(Number(l.porcentaje)||0)/100),modo:l.modo||"porcentaje",color:l.color||LISTA_COLORS[i%LISTA_COLORS.length]})));
     if(Object.keys(cfgD).length){setConfig(cfgD);setMantForm({activo:cfgD.mantenimiento_activo==="true",mensaje:cfgD.mantenimiento_mensaje||"",countdown:cfgD.mantenimiento_countdown||""});}
     if(user||vitrina)await loadProductos(1,"","");
     if(isAdmin){const[pf,ords,usrs,pC,st]=await Promise.all([API.getPreciosFijos().catch(()=>[]),API.getPedidos().catch(()=>[]),API.getUsuarios().catch(()=>[]),API.getUsuariosPendientesCount().catch(()=>({count:0})),API.getStats().catch(()=>null)]);
@@ -454,9 +470,6 @@ export default function App(){
 
   const clientRanking=useMemo(()=>{const m={};pedidos.filter(o=>o.estado!=="cancelado").forEach(o=>{const k=o.usuario_nombre||"?";if(!m[k])m[k]={nombre:k,total:0,pedidos:0};m[k].total+=Number(o.total)||0;m[k].pedidos++;});return Object.values(m).sort((a,b)=>b.total-a.total);},[pedidos]);
 
-  // WhatsApp helper — anchor click works better on mobile than window.open
-  const openWA=(number,text)=>{const a=document.createElement("a");a.href=`https://wa.me/${number}?text=${encodeURIComponent(text)}`;a.target="_blank";a.rel="noopener noreferrer";document.body.appendChild(a);a.click();document.body.removeChild(a);};
-
   const ctxVal=useMemo(()=>({userLista,pfMap,cart,setCart,addToCart,isAdmin,setEditProduct,dolarBlue,showToast,listas,setListas,preciosFijos,setPreciosFijos,
     loadProductos,page,searchDebounced,catFilter,categorias,setCategorias,refreshAdmin,config,setConfig,mantForm,setMantForm,productos,vitrina}),[userLista,pfMap,cart,addToCart,isAdmin,dolarBlue,listas,preciosFijos,page,searchDebounced,catFilter,categorias,config,mantForm,productos,vitrina]);
 
@@ -503,6 +516,11 @@ export default function App(){
       .text-slate-800,.text-slate-700,.text-slate-600{color:#e2e8f0!important}
       .text-slate-500,.text-slate-400{color:#94a3b8!important}
       .bg-gradient-to-r{background:linear-gradient(to right,#0f172a,#1e3a5f)!important}
+      .bg-amber-50{background:#78350f!important;color:#fef3c7!important}
+      .bg-red-50{background:#7f1d1d!important;color:#fecaca!important}
+      .bg-blue-50{background:#1e3a5f!important;color:#bfdbfe!important}
+      .border-amber-200{border-color:#92400e!important}
+      .text-amber-800,.text-amber-700{color:#fcd34d!important}
       input,select,textarea{background:#1e293b!important;color:#e2e8f0!important;border-color:#475569!important}
       .hover\\:shadow-md:hover{box-shadow:0 4px 6px rgba(0,0,0,.3)!important}
     `:""}</style>
@@ -627,7 +645,7 @@ export default function App(){
               const orderNum=typeof o.id==="number"?`#${String(o.id).padStart(4,"0")}`:`#${o.id}`;
               return<div key={o.id} className="bg-white border rounded-xl p-3 cursor-pointer hover:shadow-md" onClick={()=>setViewOrder(o)}>
                 <div className="flex justify-between items-start">
-                  <div><p className="font-semibold text-sm">{orderNum} — {o.usuario_nombre||"—"}</p>
+                  <div><p className="font-semibold text-sm">{orderNum} — {o.usuario_nombre||o.cliente_nombre||"—"}</p>
                     <p className="text-xs text-slate-500">{new Date(o.fecha||o.created_at).toLocaleString("es-AR")} • {o.tipo_entrega==="retiro"?"Retiro":"Envío"}</p></div>
                   <div className="text-right"><p className="font-bold text-blue-600">{fmt(o.total)}</p><StatusBadge status={o.estado}/></div></div>
                 <p className="text-xs text-slate-400 mt-1">{o.item_count||0} productos — Tocá para ver detalle</p></div>;})}
