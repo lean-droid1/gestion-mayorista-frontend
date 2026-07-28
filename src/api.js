@@ -245,6 +245,7 @@ export async function getPedidos(params = {}) {
   const qs = new URLSearchParams();
   if (params.tipo) qs.set('tipo', params.tipo);
   if (params.archivado) qs.set('archivado', 'true');
+  if (params.cancelados) qs.set('cancelados', 'true');
   const suffix = qs.toString() ? `?${qs}` : '';
   return api(`/api/pedidos${suffix}`);
 }
@@ -278,4 +279,11 @@ export async function deletePedido(id) {
 // ══════════════════════════════════════
 export async function getStats() {
   return api('/api/stats');
+}
+
+// ══════════════════════════════════════
+// HISTORIAL PRECIOS
+// ══════════════════════════════════════
+export async function getHistorialPrecios() {
+  return api('/api/historial-precios');
 }

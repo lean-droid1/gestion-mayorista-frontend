@@ -49,10 +49,10 @@ const ProductCard=memo(function ProductCard({p}){
 /* ── Edit Product ── */
 function EditProductModal({product,onClose}){
   const{listas,preciosFijos,showToast,loadProductos,page,searchDebounced,catFilter,setPreciosFijos}=useContext(Ctx);const p=product;
-  const[stk,setStk]=useState(p.stock||0);const[img,setImg]=useState(p.imagen||"");const[pb,setPb]=useState(p.precio_base||0);
+  const[stk,setStk]=useState(p.stock||0);const[stkMin,setStkMin]=useState(p.stock_minimo||0);const[img,setImg]=useState(p.imagen||"");const[pb,setPb]=useState(p.precio_base||0);
   const[modelo,setModelo]=useState(p.modelo||"");const[notas,setNotas]=useState(p.notas||"");const[compat,setCompat]=useState(p.compatibilidad||"");const[sv,setSv]=useState(false);
   const[fp,setFp]=useState(()=>{const o={};preciosFijos.filter(x=>x.producto_id===p.id).forEach(x=>{o[x.lista_precio_id]=x.precio_fijo});return o;});
-  const save=async()=>{setSv(true);try{await API.updateProducto(p.id,{stock:parseInt(stk)||0,imagen:img,precio_base:parseFloat(pb)||p.precio_base,modelo,notas,compatibilidad:compat});
+  const save=async()=>{setSv(true);try{await API.updateProducto(p.id,{stock:parseInt(stk)||0,stock_minimo:parseInt(stkMin)||0,imagen:img,precio_base:parseFloat(pb)||p.precio_base,modelo,notas,compatibilidad:compat});
     for(const l of listas){const v=fp[l.id];await API.setPrecioFijo(p.id,l.id,v&&v>0?v:0).catch(()=>{});}
     await loadProductos(page,searchDebounced,catFilter);const pf=await API.getPreciosFijos().catch(()=>[]);setPreciosFijos(Array.isArray(pf)?pf:[]);onClose();showToast("Actualizado");
   }catch(e){showToast("Error: "+e.message);}setSv(false);};
@@ -64,6 +64,7 @@ function EditProductModal({product,onClose}){
         <div><label className="text-sm font-medium text-slate-700 mb-1 block">Modelo / Nombre</label><input className="w-full px-3 py-2.5 border rounded-xl" value={modelo} onChange={e=>setModelo(e.target.value)}/></div>
         <div><label className="text-sm font-medium text-slate-700 mb-1 block">Precio base</label><input type="number" step="0.01" className="w-full px-3 py-2.5 border rounded-xl" value={pb} onChange={e=>setPb(e.target.value)}/></div>
         <div><label className="text-sm font-medium text-slate-700 mb-1 block">Stock</label><input type="number" min="0" className="w-full px-3 py-2.5 border rounded-xl" value={stk} onChange={e=>setStk(e.target.value)}/></div>
+        <div><label className="text-sm font-medium text-slate-700 mb-1 block">Stock mínimo (alerta)</label><input type="number" min="0" className="w-full px-3 py-2.5 border rounded-xl" value={stkMin} onChange={e=>setStkMin(e.target.value)} placeholder="0 = sin alerta"/></div>
         <div><label className="text-sm font-medium text-slate-700 mb-1 block">Imagen URL</label><input className="w-full px-3 py-2.5 border rounded-xl text-sm" value={img} onChange={e=>setImg(e.target.value)}/>
           {img&&<img src={img} className="mt-2 h-20 object-contain rounded-lg" onError={e=>e.target.style.display="none"}/>}</div>
         <div><label className="text-sm font-medium text-slate-700 mb-1 block">Notas</label><input className="w-full px-3 py-2.5 border rounded-xl text-sm" value={notas} onChange={e=>setNotas(e.target.value)}/></div>
@@ -158,9 +159,15 @@ function UserModal({u,isNew,onClose}){
         <input className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Teléfono / WhatsApp *" value={f.telefono} onChange={e=>setF({...f,telefono:e.target.value})}/>
         <input type="email" className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Email *" value={f.email} onChange={e=>setF({...f,email:e.target.value})}/>
         <input className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Dirección" value={f.direccion} onChange={e=>setF({...f,direccion:e.target.value})}/>
-        <select className="w-full px-3 py-2.5 border rounded-xl text-sm" value={f.rol} onChange={e=>setF({...f,rol:e.target.value})}><option value="cliente">Cliente</option><option value="admin">Admin</option></select>
+        <select className="w-full px-3 py-2.5 border rounded-xl text-sm" value={f.rol} onChange={e=>setF({...f,rol:e.target.value})}><option value="cliente">Cliente</option><option value="subadmin">Sub-Admin</option><option value="admin">Admin</option></select>
+        {f.rol==="subadmin"&&<div className="bg-slate-50 rounded-xl p-3 space-y-1"><p className="text-xs font-semibold text-slate-600 mb-1">Permisos:</p>
+          {[["productos","Productos"],["pedidos","Pedidos"],["usuarios","Usuarios"],["listas","Listas"],["config","Configuración"],["stats","Estadísticas"]].map(([k,label])=>{
+            const perms=(f.permisos||"").split(",").filter(Boolean);const has=perms.includes(k);
+            return<label key={k} className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={has} onChange={()=>{const nw=has?perms.filter(p=>p!==k):[...perms,k];setF({...f,permisos:nw.join(",")});}} className="w-4 h-4 rounded"/><span className="text-sm">{label}</span></label>;})}</div>}
         <select className="w-full px-3 py-2.5 border rounded-xl text-sm" value={f.lista_precio_id} onChange={e=>setF({...f,lista_precio_id:e.target.value})}>
           {listas.map(l=><option key={l.id} value={l.id}>{l.nombre}</option>)}</select>
+        <div><label className="text-sm font-medium text-slate-700 mb-1 block">Notas internas (solo admin)</label>
+          <textarea className="w-full px-3 py-2.5 border rounded-xl text-sm" rows={2} placeholder="Ej: Paga a 30 días, viene los viernes..." value={f.notas_admin||""} onChange={e=>setF({...f,notas_admin:e.target.value})}/></div>
         {!isNew&&<label className="flex items-center gap-3 py-2 cursor-pointer"><input type="checkbox" checked={f.activo!==false&&f.activo!=="false"} onChange={e=>setF({...f,activo:e.target.checked})} className="w-5 h-5 rounded"/>
           <span className="text-sm font-medium">{f.activo!==false&&f.activo!=="false"?"✅ Cuenta activa":"🔴 Cuenta suspendida"}</span></label>}
         <button onClick={save} disabled={sv} className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl disabled:opacity-50">{sv?"Guardando...":"Guardar datos"}</button>
@@ -506,7 +513,13 @@ export default function App(){
   const exportOrders=()=>{const rows=[];pedidos.forEach(o=>(o.items||[]).forEach(i=>{rows.push({Pedido:o.id,Fecha:new Date(o.fecha||o.created_at).toLocaleDateString("es-AR"),Cliente:o.usuario_nombre,Producto:i.categoria+" - "+i.modelo,Cantidad:i.cantidad||i.qty,Precio:i.precio_unitario,Subtotal:(Number(i.precio_unitario)||0)*(i.cantidad||i.qty),Total:o.total,Estado:o.estado});}));
     const ws=XLSX.utils.json_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Pedidos");XLSX.writeFile(wb,"pedidos.xlsx");showToast("Excel descargado");};
 
-  const updateOrder=async(id,data)=>{try{await API.updatePedido(id,data);const ords=await API.getPedidos().catch(()=>[]);setPedidos(Array.isArray(ords)?ords:[]);showToast("Actualizado");if(viewOrder?.id===id)setViewOrder(prev=>({...prev,...data}));}catch(e){showToast("Error: "+e.message);}};
+  const updateOrder=async(id,data)=>{try{await API.updatePedido(id,data);const ords=await API.getPedidos().catch(()=>[]);setPedidos(Array.isArray(ords)?ords:[]);showToast("Actualizado");
+    if(viewOrder?.id===id)setViewOrder(prev=>({...prev,...data}));
+    // WhatsApp automático al cambiar estado
+    if(data.estado&&config.whatsapp){const o=pedidos.find(p=>p.id===id)||viewOrder;if(o){const tel=o.usuario_telefono||o.cliente_telefono;if(tel){const num=tel.replace(/\D/g,"");const n=num.startsWith("54")?num:`54${num}`;const orderNum=`#${String(id).padStart(4,"0")}`;
+      const msgs={preparando:`Hola ${o.usuario_nombre||""}, tu pedido ${orderNum} está siendo *preparado* 📦`,listo:`Hola ${o.usuario_nombre||""}, tu pedido ${orderNum} está *listo* ✅`,entregado:`Hola ${o.usuario_nombre||""}, tu pedido ${orderNum} fue *entregado* 🎉`,cancelado:`Hola ${o.usuario_nombre||""}, tu pedido ${orderNum} fue *cancelado* ❌`};
+      if(msgs[data.estado])openWA(n,msgs[data.estado]);}}}
+  }catch(e){showToast("Error: "+e.message);}};
 
   const profitData=useMemo(()=>{if(!pedidos.length)return null;const now=new Date();
     const calc=fn=>{let rev=0,cost=0;pedidos.filter(o=>o.estado!=="cancelado"&&fn(new Date(o.fecha||o.created_at))).forEach(o=>{rev+=Number(o.total)||0;(o.items||[]).forEach(i=>{cost+=(Number(i.precio_base)||0)*(i.cantidad||i.qty||0);});});return{revenue:rev,cost,profit:rev-cost};};
@@ -664,13 +677,17 @@ export default function App(){
 
           {adminTab==="users"&&<div>
             <div className="flex gap-2 mb-3"><button onClick={()=>setNewUserModal(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium flex items-center gap-1.5"><UserPlus className="w-4 h-4"/>Nuevo</button>
-              <button onClick={refreshAdmin} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-sm font-medium flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5"/>Actualizar</button></div>
+              <button onClick={refreshAdmin} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-sm font-medium flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5"/>Actualizar</button>
+              <button onClick={()=>{const rows=usuarios.filter(u=>u.rol!=="admin").map(u=>({Nombre:u.nombre,Usuario:u.usuario,Telefono:u.telefono,Email:u.email,Direccion:u.direccion,Lista:listas.find(l=>l.id===u.lista_precio_id)?.nombre||"",Estado:u.estado,Notas:u.notas_admin||""}));
+                const ws=XLSX.utils.json_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Clientes");XLSX.writeFile(wb,"clientes.xlsx");showToast("Excel descargado");}}
+                className="px-4 py-2 bg-emerald-100 text-emerald-700 rounded-xl text-sm font-medium flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>Excel</button></div>
             {usuarios.filter(u=>u.estado==="pendiente").length>0&&<div className="mb-4"><h4 className="text-sm font-bold text-amber-700 mb-2"><Clock className="w-4 h-4 inline mr-1"/>Pendientes</h4>
               {usuarios.filter(u=>u.estado==="pendiente").map(u=><div key={u.id} className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl p-3 mb-2">
                 <div><p className="font-semibold text-sm">{u.nombre}</p><p className="text-xs text-slate-500">@{u.usuario} {u.telefono?`• ${u.telefono}`:""}</p></div>
                 <button onClick={()=>setEditUser(u)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium">Revisar</button></div>)}</div>}
             {usuarios.filter(u=>u.estado!=="pendiente").map(u=>{const activo=u.activo!==false&&u.activo!=="false";return<div key={u.id} className={`flex items-center justify-between border rounded-xl p-3 mb-2 ${activo?"bg-white":"bg-red-50 border-red-200"}`}>
-              <div><p className="font-semibold text-sm flex items-center gap-1.5">{u.nombre} <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activo?"bg-emerald-100 text-emerald-700":"bg-red-100 text-red-600"}`}>{activo?"activo":"suspendido"}</span></p>
+              <div><p className="font-semibold text-sm flex items-center gap-1.5">{u.nombre} <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activo?"bg-emerald-100 text-emerald-700":"bg-red-100 text-red-600"}`}>{activo?"activo":"suspendido"}</span>
+                {u.rol==="subadmin"&&<span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">sub-admin</span>}</p>
                 <p className="text-xs text-slate-500">@{u.usuario} • {u.rol==="admin"?"Admin":listas.find(l=>l.id===u.lista_precio_id)?.nombre||""}</p></div>
               <div className="flex gap-1"><button onClick={()=>setEditUser(u)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200"><Edit2 className="w-3.5 h-3.5"/></button>
                 {u.rol!=="admin"&&<button onClick={async(ev)=>{ev.stopPropagation();if(!confirm(`¿Eliminar ${u.nombre}?`))return;try{await API.deleteUsuario(u.id);setUsuarios(prev=>prev.filter(x=>x.id!==u.id));showToast("Eliminado");setTimeout(()=>refreshAdmin(),500);}catch(err){showToast("Error: "+err.message);}}}
@@ -680,25 +697,33 @@ export default function App(){
                 <span className="text-sm font-bold text-blue-600">{fmt(c.total)} <span className="text-xs text-slate-400 font-normal">({c.pedidos})</span></span></div>)}</div>}
           </div>}
 
-          {adminTab==="orders"&&<div>
-            <div className="flex gap-2 mb-3"><button onClick={()=>setOrderFilter(orderFilter==="presupuestos"?"all":"presupuestos")}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium ${orderFilter==="presupuestos"?"bg-amber-600 text-white":"bg-amber-100 text-amber-700"}`}>📋 Presupuestos</button>
-              <button onClick={()=>{const nv=orderFilter==="archivados"?"all":"archivados";setOrderFilter(nv);refreshAdmin(nv==="archivados"?{archivado:true}:{});}}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium ${orderFilter==="archivados"?"bg-slate-600 text-white":"bg-slate-100 text-slate-600"}`}>📦 Archivados</button>
-              <button onClick={exportOrders} className="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-xl text-xs font-medium flex items-center gap-1 ml-auto"><Download className="w-3 h-3"/>Excel</button></div>
-            {orderFilter!=="presupuestos"&&orderFilter!=="archivados"&&<div className="flex gap-1 overflow-x-auto mb-3">{["all","pendiente","preparando","listo","entregado","cancelado"].map(s=><button key={s} onClick={()=>setOrderFilter(s)}
+          {adminTab==="orders"&&(()=>{
+            const[ordTab,setOrdTab]=useState(localStorage.getItem("gm_ordtab")||"pedidos");
+            const changeOrdTab=t=>{setOrdTab(t);localStorage.setItem("gm_ordtab",t);if(t==="archivados")refreshAdmin({archivado:true});else refreshAdmin();};
+            const tabs=[{id:"pedidos",label:"📦 Pedidos",color:"blue"},{id:"presupuestos",label:"📋 Presupuestos",color:"amber"},{id:"cancelados",label:"❌ Cancelados",color:"red"},{id:"archivados",label:"🗃 Archivados",color:"slate"}];
+            const filtered=pedidos.filter(o=>{
+              if(ordTab==="pedidos")return o.tipo!=="presupuesto"&&o.estado!=="cancelado";
+              if(ordTab==="presupuestos")return o.tipo==="presupuesto"&&o.estado!=="cancelado";
+              if(ordTab==="cancelados")return o.estado==="cancelado";
+              if(ordTab==="archivados")return true;return true;});
+            return<div>
+              <div className="flex gap-1.5 mb-3 overflow-x-auto">{tabs.map(t=><button key={t.id} onClick={()=>changeOrdTab(t.id)}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap ${ordTab===t.id?`bg-${t.color}-600 text-white`:`bg-${t.color}-100 text-${t.color}-700`}`}>{t.label}</button>)}
+                <button onClick={exportOrders} className="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-xl text-xs font-medium flex items-center gap-1 ml-auto shrink-0"><Download className="w-3 h-3"/>Excel</button></div>
+              {ordTab==="pedidos"&&<div className="flex gap-1 overflow-x-auto mb-3">{["all","pendiente","preparando","listo","entregado"].map(s=><button key={s} onClick={()=>setOrderFilter(s)}
                 className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap ${orderFilter===s?"bg-blue-600 text-white":"bg-slate-100 text-slate-600"}`}>{s==="all"?"Todos":s}</button>)}</div>}
-            <div className="space-y-2 max-h-[60vh] overflow-y-auto">{(orderFilter==="presupuestos"?pedidos.filter(o=>o.tipo==="presupuesto"):orderFilter==="archivados"?pedidos:pedidos.filter(o=>o.tipo!=="presupuesto")).filter(o=>orderFilter==="all"||orderFilter==="presupuestos"||orderFilter==="archivados"||o.estado===orderFilter).map(o=>{
-              const orderNum=typeof o.id==="number"?`#${String(o.id).padStart(4,"0")}`:`#${o.id}`;
-              return<div key={o.id} className={`bg-white border rounded-xl p-3 cursor-pointer hover:shadow-md ${o.tipo==="presupuesto"?"border-amber-300":""}`} onClick={()=>setViewOrder(o)}>
-                <div className="flex justify-between items-start">
-                  <div><p className="font-semibold text-sm">{orderNum} — {o.usuario_nombre||o.cliente_nombre||"—"}</p>
-                    <p className="text-xs text-slate-500">{new Date(o.fecha||o.created_at).toLocaleString("es-AR")} • {o.tipo_entrega==="retiro"?"Retiro":"Envío"}</p></div>
-                  <div className="text-right"><p className="font-bold text-blue-600">{fmt(o.total)}</p>
-                    {o.tipo==="presupuesto"?<span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">Presupuesto</span>:<StatusBadge status={o.estado}/>}</div></div>
-                <p className="text-xs text-slate-400 mt-1">{o.item_count||0} productos{o.metodo_pago?` • ${o.metodo_pago}`:""}</p></div>;})}
-              {(orderFilter==="presupuestos"?pedidos.filter(o=>o.tipo==="presupuesto"):orderFilter==="archivados"?pedidos:pedidos.filter(o=>o.tipo!=="presupuesto")).filter(o=>orderFilter==="all"||orderFilter==="presupuestos"||orderFilter==="archivados"||o.estado===orderFilter).length===0&&<p className="text-center text-slate-400 py-8 text-sm">{orderFilter==="presupuestos"?"Sin presupuestos":orderFilter==="archivados"?"Sin archivados":"Sin pedidos"}</p>}
-            </div></div>}
+              <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                {filtered.filter(o=>ordTab!=="pedidos"||orderFilter==="all"||o.estado===orderFilter).map(o=>{
+                  const orderNum=typeof o.id==="number"?`#${String(o.id).padStart(4,"0")}`:`#${o.id}`;
+                  return<div key={o.id} className={`bg-white border rounded-xl p-3 cursor-pointer hover:shadow-md ${o.tipo==="presupuesto"?"border-amber-300":""}`} onClick={()=>setViewOrder(o)}>
+                    <div className="flex justify-between items-start">
+                      <div><p className="font-semibold text-sm">{orderNum} — {o.usuario_nombre||o.cliente_nombre||"—"}</p>
+                        <p className="text-xs text-slate-500">{new Date(o.fecha||o.created_at).toLocaleString("es-AR")} • {o.tipo_entrega==="retiro"?"Retiro":"Envío"}</p></div>
+                      <div className="text-right"><p className="font-bold text-blue-600">{fmt(o.total)}</p>
+                        {o.tipo==="presupuesto"?<span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">Presupuesto</span>:<StatusBadge status={o.estado}/>}</div></div>
+                    <p className="text-xs text-slate-400 mt-1">{o.item_count||0} productos{o.metodo_pago?` • 💳 ${o.metodo_pago}`:""}</p></div>;})}
+                {filtered.filter(o=>ordTab!=="pedidos"||orderFilter==="all"||o.estado===orderFilter).length===0&&<p className="text-center text-slate-400 py-8 text-sm">Sin {ordTab}</p>}
+              </div></div>;})()}
 
           {adminTab==="tiers"&&<div>
             <button onClick={()=>setEditTier("new")} className="mb-3 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium flex items-center gap-1.5"><Plus className="w-4 h-4"/>Nueva lista</button>
@@ -713,11 +738,28 @@ export default function App(){
 
           {adminTab==="stats"&&<div className="space-y-4">
             <button onClick={refreshAdmin} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-sm font-medium flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5"/>Actualizar</button>
-            {stats&&<div className="grid grid-cols-2 gap-3">{[["Productos",stats.total_productos,Package],["Con stock",stats.con_stock,Check],["Usuarios",stats.total_usuarios,Users],["Pedidos",stats.total_pedidos,ClipboardList]].map(([l,v,Icon])=>
+            {stats&&<div className="grid grid-cols-2 gap-3">{[["Productos",stats.totalProductos,Package],["Usuarios",stats.totalUsuarios,Users],["Pedidos",stats.totalPedidos,ClipboardList],["Pendientes",stats.pendientesAprobacion,Clock]].map(([l,v,Icon])=>
               <div key={l} className="bg-white border rounded-xl p-4 text-center"><Icon className="w-6 h-6 mx-auto mb-2 text-blue-500"/><p className="text-2xl font-bold">{v??"—"}</p><p className="text-xs text-slate-500">{l}</p></div>)}</div>}
             {profitData&&<div className="bg-white border rounded-xl p-4"><h4 className="font-semibold text-sm mb-3"><TrendingUp className="w-4 h-4 inline mr-1"/>Ganancias</h4>
               <div className="grid grid-cols-2 gap-3">{[["Hoy",profitData.hoy],["Semana",profitData.semana],["Mes",profitData.mes],["Año",profitData.año]].map(([label,d])=>
                 <div key={label} className="bg-slate-50 rounded-lg p-3"><p className="text-xs text-slate-500">{label}</p><p className="text-lg font-bold text-emerald-600">{fmt(d.profit)}</p><p className="text-[10px] text-slate-400">Vendido: {fmt(d.revenue)}</p></div>)}</div></div>}
+            {/* Ventas por categoría */}
+            {stats?.porCategoria?.length>0&&<div className="bg-white border rounded-xl p-4"><h4 className="font-semibold text-sm mb-3"><BarChart3 className="w-4 h-4 inline mr-1"/>Ventas por categoría</h4>
+              <div className="space-y-1.5">{stats.porCategoria.map(c=><div key={c.categoria} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2">
+                <span className="text-sm truncate flex-1">{c.categoria}</span><span className="text-xs text-slate-400 mx-2">{c.pedidos} ped.</span><span className="text-sm font-bold text-blue-600">{fmt(c.total)}</span></div>)}</div></div>}
+            {/* Stock bajo */}
+            {stats?.stockBajo?.length>0&&<div className="bg-white border border-amber-200 rounded-xl p-4"><h4 className="font-semibold text-sm mb-3 text-amber-700"><AlertTriangle className="w-4 h-4 inline mr-1"/>Stock bajo</h4>
+              <div className="space-y-1">{stats.stockBajo.map(p=><div key={p.id} className="flex items-center justify-between bg-amber-50 rounded-lg px-3 py-2">
+                <span className="text-sm truncate flex-1">{p.categoria} - {p.modelo}</span><span className="text-xs font-bold text-red-600">{p.stock}/{p.stock_minimo}</span></div>)}</div></div>}
+            {/* Historial de precios */}
+            {(()=>{const[hist,setHist]=useState(null);const[showHist,setShowHist]=useState(false);
+              return<div className="bg-white border rounded-xl p-4"><button onClick={async()=>{if(!showHist){try{const h=await API.getHistorialPrecios();setHist(h);}catch{}}setShowHist(!showHist);}}
+                className="w-full text-left font-semibold text-sm flex items-center justify-between"><span><FileText className="w-4 h-4 inline mr-1"/>Historial de precios</span><ChevronDown className={`w-4 h-4 transition-transform ${showHist?"rotate-180":""}`}/></button>
+                {showHist&&<div className="mt-3 max-h-60 overflow-y-auto space-y-1">{(hist||[]).length===0?<p className="text-xs text-slate-400">Sin cambios registrados</p>
+                  :hist.map(h=><div key={h.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-1.5 text-xs">
+                    <div className="truncate flex-1"><span className="font-medium">{h.categoria} - {h.modelo}</span></div>
+                    <span className="text-red-500 mx-1">{fmt(h.precio_anterior)}</span><span>→</span><span className="text-emerald-600 mx-1">{fmt(h.precio_nuevo)}</span>
+                    <span className="text-slate-400 ml-2 shrink-0">{h.usuario_nombre} • {new Date(h.created_at).toLocaleDateString("es-AR")}</span></div>)}</div>}</div>;})()}
           </div>}
 
           {adminTab==="config"&&<ConfigPanel/>}
