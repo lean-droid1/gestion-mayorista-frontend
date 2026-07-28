@@ -123,7 +123,7 @@ function UserModal({u,isNew,onClose}){
     :{nombre:u?.nombre||"",usuario:u?.usuario||"",password:"",telefono:u?.telefono||"",email:u?.email||"",direccion:u?.direccion||"",rol:u?.rol||"client",lista_precio_id:u?.lista_precio_id||listas[0]?.id||""});
   const[sv,setSv]=useState(false);
   const save=async()=>{if(!f.nombre||!f.usuario){showToast("Nombre y usuario obligatorios");return;}setSv(true);try{
-    const datos={...f};if(!datos.password)delete datos.password;
+    const datos=isNew?{...f,activo:true}:{...u,...f,activo:u?.activo??true};delete datos.id;delete datos.created_at;delete datos.updated_at;if(!datos.password)delete datos.password;
     if(isNew)await API.register(datos);else await API.updateUsuario(u.id,datos);
     showToast(isNew?"Creado":"Actualizado");onClose();await refreshAdmin();
   }catch(e){showToast("Error: "+e.message);}setSv(false);};
@@ -175,7 +175,7 @@ function TierModal({tier,isNew,onClose}){
           <input type="number" step={f.modo==="porcentaje"?"1":"0.05"} className="w-full px-3 py-2.5 border rounded-xl text-sm" value={iv}
             onChange={e=>{const v=parseFloat(e.target.value)||0;setIv(v);setF({...f,multiplicador:f.modo==="porcentaje"?1+v/100:v});}}/></div>
         <div className="w-20"><label className="text-xs text-slate-500 mb-1 block">Color</label><input type="color" className="w-full h-[42px] rounded-xl border cursor-pointer" value={f.color} onChange={e=>setF({...f,color:e.target.value})}/></div></div>
-      <input type="number" min="0" className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Compra mínima USD (0=sin)" value={f.compra_minima||""} onChange={e=>setF({...f,compra_minima:parseFloat(e.target.value)||0})}/>
+      <div><label className="text-xs text-slate-500 mb-1 block">Compra mínima (USD) — 0 = sin mínimo</label><input type="number" min="0" className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="0" value={f.compra_minima||""} onChange={e=>setF({...f,compra_minima:parseFloat(e.target.value)||0})}/></div>
       <input className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Mensaje promo (opcional)" value={f.promo_msg} onChange={e=>setF({...f,promo_msg:e.target.value})}/>
       <p className="text-xs text-slate-400">Base $1.00 → {fmt(calcM())}</p>
       <button onClick={save} disabled={sv} className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl disabled:opacity-50">{sv?"Guardando...":"Guardar"}</button>
@@ -495,7 +495,7 @@ export default function App(){
             {usuarios.filter(u=>u.estado!=="pendiente").map(u=><div key={u.id} className="flex items-center justify-between bg-white border rounded-xl p-3 mb-2">
               <div><p className="font-semibold text-sm">{u.nombre}</p><p className="text-xs text-slate-500">@{u.usuario} • {u.rol==="admin"?"Admin":listas.find(l=>l.id===u.lista_precio_id)?.nombre||""}</p></div>
               <div className="flex gap-1"><button onClick={()=>setEditUser(u)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200"><Edit2 className="w-3.5 h-3.5"/></button>
-                {u.rol!=="admin"&&<button onClick={async()=>{if(!confirm(`¿Eliminar ${u.nombre}?`))return;try{await API.deleteUsuario(u.id);await refreshAdmin();}catch(e){showToast("Error: "+e.message);}}}
+                {u.rol!=="admin"&&<button onClick={async(e)=>{e.stopPropagation();if(!confirm(`¿Eliminar ${u.nombre}?`))return;try{await API.deleteUsuario(u.id);setUsuarios(prev=>prev.filter(x=>x.id!==u.id));showToast("Eliminado");setTimeout(()=>refreshAdmin(),500);}catch(e){showToast("Error: "+e.message);}}}
                   className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-500"><Trash2 className="w-3.5 h-3.5"/></button>}</div></div>)}
             {clientRanking.length>0&&<div className="mt-6"><h4 className="text-sm font-bold text-slate-700 mb-2"><TrendingUp className="w-4 h-4 inline mr-1"/>Ranking</h4>
               {clientRanking.slice(0,10).map((c,i)=><div key={c.nombre} className="flex items-center justify-between bg-white border rounded-lg p-2 mb-1">
