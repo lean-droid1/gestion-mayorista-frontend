@@ -17,10 +17,11 @@ const Ctx=createContext();
 const StatusBadge=({status})=>{const m={pendiente:"bg-amber-100 text-amber-700",preparando:"bg-blue-100 text-blue-700",listo:"bg-emerald-100 text-emerald-700",entregado:"bg-slate-100 text-slate-500",cancelado:"bg-red-100 text-red-600"};return<span className={`text-xs px-2 py-1 rounded-full font-medium ${m[status]||m.pendiente}`}>{status}</span>;};
 
 const ProductCard=memo(function ProductCard({p}){
-  const{userLista,pfMap,cart,addToCart,isAdmin,setEditProduct,dolarBlue}=useContext(Ctx);
+  const{userLista,pfMap,cart,addToCart,isAdmin,setEditProduct,dolarBlue,vitrina}=useContext(Ctx);
   const[qty,setQty]=useState(1);
   if(!userLista)return null;
-  const price=getPrice(p.precio_base,userLista,pfMap,p.id);const inCart=cart.find(c=>c.id===p.id);const cc=getCatColor(p.categoria);
+  const isVitrina=vitrina||p.precio_base==null||p.precio_base===undefined;
+  const price=isVitrina?0:getPrice(p.precio_base,userLista,pfMap,p.id);const inCart=cart.find(c=>c.id===p.id);const cc=getCatColor(p.categoria);
   return(<div className="bg-white rounded-xl border border-slate-100 overflow-hidden hover:shadow-md transition-shadow">
     <div className="h-2 w-full" style={{backgroundColor:cc,opacity:.7}}/>
     {p.imagen?<div className="h-28 bg-slate-50 flex items-center justify-center overflow-hidden"><img src={p.imagen} alt={p.modelo} className="h-full w-full object-contain" onError={e=>e.target.style.display="none"}/></div>
@@ -28,7 +29,8 @@ const ProductCard=memo(function ProductCard({p}){
     <div className="p-3">
       <p className="text-[10px] font-medium uppercase tracking-wide truncate" style={{color:cc}}>{p.categoria}</p>
       <p className="text-sm font-bold text-slate-800 mt-0.5 truncate" title={p.modelo}>{p.modelo}</p>
-      <div className="flex items-center justify-between mt-2">
+      {isVitrina?<div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-2 text-center"><p className="text-xs font-medium text-amber-700">¿Querés saber el precio?</p><p className="text-[10px] text-amber-600 mt-0.5">Ingresá o creá tu cuenta</p></div>
+      :<><div className="flex items-center justify-between mt-2">
         <div><p className="text-lg font-bold" style={{color:userLista.color}}>{fmt(price)}</p>{dolarBlue&&<p className="text-[10px] text-slate-400">{fmtARS(price*dolarBlue)}</p>}</div>
         {isAdmin&&<button onClick={()=>setEditProduct(p)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500"><Edit2 className="w-3.5 h-3.5"/></button>}</div>
       <div className="flex items-center gap-1.5 mt-2">
@@ -36,7 +38,7 @@ const ProductCard=memo(function ProductCard({p}){
           className="w-14 px-1.5 py-1.5 border rounded-lg text-center text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"/>
         <button onClick={()=>addToCart(p,inCart?0:qty)} disabled={!!inCart}
           className={`flex-1 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 ${inCart?"bg-blue-100 text-blue-700":"bg-blue-600 text-white hover:bg-blue-700"}`}>
-          {inCart?<><Check className="w-3.5 h-3.5"/>En carrito</>:<><Plus className="w-3.5 h-3.5"/>Agregar</>}</button></div>
+          {inCart?<><Check className="w-3.5 h-3.5"/>En carrito</>:<><Plus className="w-3.5 h-3.5"/>Agregar</>}</button></div></>}
     </div></div>);
 });
 
@@ -188,15 +190,25 @@ function TierModal({tier,isNew,onClose}){
 
 /* ── Order Detail Modal (with editing) ── */
 function OrderDetailModal({order,onClose,onUpdate,onPrint,onClone}){
-  const{productos:allProds,userLista,pfMap,showToast}=useContext(Ctx);
+  const{userLista,pfMap,showToast}=useContext(Ctx);
   const o=order;if(!o)return null;
   const orderNum=typeof o.id==="number"?`#${String(o.id).padStart(4,"0")}`:`#${o.id}`;
   const[editing,setEditing]=useState(false);
-  const[items,setItems]=useState((o.items||[]).map(i=>({...i,qty:i.cantidad||i.qty||1})));
+  const[items,setItems]=useState([]);
   const[addSearch,setAddSearch]=useState("");
+  const[searchResults,setSearchResults]=useState([]);
   const[saving,setSaving]=useState(false);
+  const[loadingItems,setLoadingItems]=useState(true);
   const editTotal=items.reduce((s,i)=>s+(Number(i.precio_unitario)||0)*(i.qty||0),0);
-  const searchResults=addSearch.length>=2?allProds.filter(p=>(p.modelo||"").toLowerCase().includes(addSearch.toLowerCase())||(p.categoria||"").toLowerCase().includes(addSearch.toLowerCase())).slice(0,8):[];
+  const itemName=i=>i.nombre_producto||(i.categoria&&i.modelo?`${i.categoria} - ${i.modelo}`:i.modelo||"Producto");
+  // Load full pedido with items on mount
+  useEffect(()=>{(async()=>{try{setLoadingItems(true);const full=await API.getPedido(o.id);setItems((full.items||[]).map(i=>({...i,qty:i.cantidad||i.qty||1})));}catch(e){console.error(e);}setLoadingItems(false);})();},[o.id]);
+  // Search products via API for order editing
+  const searchTimer=useRef(null);
+  useEffect(()=>{if(addSearch.length<2){setSearchResults([]);return;}
+    if(searchTimer.current)clearTimeout(searchTimer.current);
+    searchTimer.current=setTimeout(async()=>{try{const r=await API.getProductos({q:addSearch,limit:10});setSearchResults(r.productos||r.data||r||[]);}catch{setSearchResults([]);}},400);
+    return()=>clearTimeout(searchTimer.current);},[addSearch]);
 
   const saveEdit=async()=>{setSaving(true);try{
     const newItems=items.map(i=>({producto_id:i.producto_id||i.id,categoria:i.categoria,modelo:i.modelo,nombre_producto:`${i.categoria} - ${i.modelo}`,cantidad:i.qty,precio_unitario:Number(i.precio_unitario)||0,precio_base:Number(i.precio_base)||0}));
@@ -224,9 +236,10 @@ function OrderDetailModal({order,onClose,onUpdate,onPrint,onClone}){
         {o.notas&&<p className="text-sm text-slate-500 italic bg-slate-50 rounded-lg p-2">Nota: {o.notas}</p>}
 
         {/* Items table */}
-        {editing?<div className="space-y-2">
+        {loadingItems?<div className="text-center py-6"><Loader2 className="w-6 h-6 text-blue-500 animate-spin mx-auto"/><p className="text-xs text-slate-400 mt-2">Cargando productos...</p></div>
+        :editing?<div className="space-y-2">
           {items.map((i,idx)=><div key={idx} className="flex items-center gap-2 bg-slate-50 rounded-lg p-2">
-            <div className="flex-1 min-w-0"><p className="text-xs text-slate-500 truncate">{i.categoria}</p><p className="text-sm font-medium truncate">{i.modelo}</p>
+            <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate">{itemName(i)}</p>
               <p className="text-xs text-blue-600">{fmt(Number(i.precio_unitario)||0)}</p></div>
             <input type="number" min="1" value={i.qty} onChange={e=>setItems(prev=>prev.map((x,j)=>j===idx?{...x,qty:Math.max(1,parseInt(e.target.value)||1)}:x))}
               className="w-14 px-1 py-1.5 border rounded-lg text-center text-sm"/>
@@ -241,7 +254,7 @@ function OrderDetailModal({order,onClose,onUpdate,onPrint,onClone}){
             <button onClick={()=>{setItems((o.items||[]).map(i=>({...i,qty:i.cantidad||i.qty||1})));setEditing(false);}} className="py-2.5 px-4 bg-slate-100 rounded-xl text-sm">Cancelar</button></div>
         </div>
         :<table className="w-full text-sm"><thead><tr className="border-b"><th className="text-left py-1">Producto</th><th className="text-center">Cant</th><th className="text-right">Subtotal</th></tr></thead>
-          <tbody>{(o.items||[]).map((i,idx)=><tr key={idx} className="border-b border-slate-50"><td className="py-1.5">{i.categoria} - {i.modelo}</td>
+          <tbody>{items.map((i,idx)=><tr key={idx} className="border-b border-slate-50"><td className="py-1.5">{itemName(i)}</td>
             <td className="text-center">{i.cantidad||i.qty}</td><td className="text-right">{fmt((Number(i.precio_unitario)||0)*(i.cantidad||i.qty))}</td></tr>)}</tbody></table>}
 
         {!editing&&<><div className="flex gap-2 flex-wrap">
@@ -445,7 +458,7 @@ export default function App(){
   const openWA=(number,text)=>{const a=document.createElement("a");a.href=`https://wa.me/${number}?text=${encodeURIComponent(text)}`;a.target="_blank";a.rel="noopener noreferrer";document.body.appendChild(a);a.click();document.body.removeChild(a);};
 
   const ctxVal=useMemo(()=>({userLista,pfMap,cart,setCart,addToCart,isAdmin,setEditProduct,dolarBlue,showToast,listas,setListas,preciosFijos,setPreciosFijos,
-    loadProductos,page,searchDebounced,catFilter,categorias,setCategorias,refreshAdmin,config,setConfig,mantForm,setMantForm,productos}),[userLista,pfMap,cart,addToCart,isAdmin,dolarBlue,listas,preciosFijos,page,searchDebounced,catFilter,categorias,config,mantForm,productos]);
+    loadProductos,page,searchDebounced,catFilter,categorias,setCategorias,refreshAdmin,config,setConfig,mantForm,setMantForm,productos,vitrina}),[userLista,pfMap,cart,addToCart,isAdmin,dolarBlue,listas,preciosFijos,page,searchDebounced,catFilter,categorias,config,mantForm,productos,vitrina]);
 
   const[darkMode,setDarkMode]=useState(()=>localStorage.getItem("darkMode")==="true");
   const toggleDark=useCallback(()=>{const v=!darkMode;setDarkMode(v);localStorage.setItem("darkMode",v?"true":"false");},[darkMode]);
@@ -507,8 +520,8 @@ export default function App(){
       <div className="flex-1 relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"/>
         <input className="w-full pl-9 pr-3 py-2.5 bg-slate-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white" placeholder="Buscar..." value={search} onChange={e=>setSearch(e.target.value)}/>
         {search&&<button onClick={()=>setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2"><X className="w-4 h-4 text-slate-400"/></button>}</div>
-      <button onClick={()=>setShowCart(true)} className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 shrink-0 relative"><ShoppingCart className="w-5 h-5 text-slate-700"/>
-        {cartCount>0&&<span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{cartCount}</span>}</button></div>
+      {!vitrina&&<button onClick={()=>setShowCart(true)} className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 shrink-0 relative"><ShoppingCart className="w-5 h-5 text-slate-700"/>
+        {cartCount>0&&<span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{cartCount}</span>}</button>}</div>
       {(catFilter||brandFilter)&&<div className="px-3 pb-2 flex items-center gap-2"><span className="text-xs text-slate-500">Filtro:</span><span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium truncate max-w-[200px]">{catFilter||brandFilter}</span>
         <button onClick={()=>{setCatFilter("");setBrandFilter("");}} className="text-xs text-red-500 underline">limpiar</button></div>}
       {userLista?.promo_msg&&<div className="px-3 pb-2"><p className="text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-full font-medium inline-block">{userLista.promo_msg}</p></div>}
@@ -516,10 +529,16 @@ export default function App(){
 
     <main>
       {view==="catalog"&&<div className="p-3">
-        {/* Info pagos/envíos arriba */}
-        {(config.info_pagos||config.info_envios)&&<div className="flex gap-2 mb-3 overflow-x-auto">
-          {config.info_pagos&&<div className="bg-blue-50 border border-blue-200 rounded-xl p-2.5 text-xs text-blue-800 whitespace-nowrap flex-shrink-0"><span className="font-bold">💳 Pagos:</span> {config.info_pagos}</div>}
-          {config.info_envios&&<div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-xs text-amber-800 whitespace-nowrap flex-shrink-0"><span className="font-bold">🚚 Envíos:</span> {config.info_envios}</div>}</div>}
+        {/* Info pagos/envíos - carrusel auto-deslizante */}
+        {(config.info_pagos||config.info_envios)&&(()=>{
+          const infoBanners=[];
+          if(config.info_pagos)infoBanners.push({icon:"💳",label:"Pagos",text:config.info_pagos,bg:"bg-blue-50 border-blue-200 text-blue-800"});
+          if(config.info_envios)infoBanners.push({icon:"🚚",label:"Envíos",text:config.info_envios,bg:"bg-amber-50 border-amber-200 text-amber-800"});
+          if(config.info_mora)infoBanners.push({icon:"⏰",label:"Mora",text:config.info_mora,bg:"bg-red-50 border-red-200 text-red-800"});
+          const InfoCarousel=()=>{const[ci,setCi]=useState(0);useEffect(()=>{if(infoBanners.length<=1)return;const t=setInterval(()=>setCi(p=>(p+1)%infoBanners.length),4000);return()=>clearInterval(t);},[]);
+            return<div className="mb-3 relative overflow-hidden rounded-xl" style={{minHeight:"44px"}}>{infoBanners.map((b,i)=><div key={i} className={`border rounded-xl p-2.5 text-xs transition-all duration-500 ${b.bg} ${i===ci?"opacity-100":"opacity-0 absolute inset-0"}`} style={{whiteSpace:"normal"}}><span className="font-bold">{b.icon} {b.label}:</span> {b.text}</div>)}</div>;};
+          return<InfoCarousel/>;
+        })()}
         {loading&&!productos.length?<div className="text-center py-16"><Loader2 className="w-8 h-8 text-blue-500 animate-spin mx-auto"/></div>
         :displayProducts.length===0?<div className="text-center py-16 text-slate-400"><Search className="w-12 h-12 mx-auto mb-3 opacity-30"/><p>Sin resultados</p>
           {matchingCats.length>0&&<div className="mt-3"><p className="text-sm text-slate-500 mb-2">Categorías que coinciden:</p>{matchingCats.map(c=><button key={c} onClick={()=>{setCatFilter(c);setSearch("");}} className="text-sm px-3 py-1.5 rounded-full bg-blue-100 text-blue-700 mr-1 mb-1">{c}</button>)}</div>}
@@ -611,7 +630,7 @@ export default function App(){
                   <div><p className="font-semibold text-sm">{orderNum} — {o.usuario_nombre||"—"}</p>
                     <p className="text-xs text-slate-500">{new Date(o.fecha||o.created_at).toLocaleString("es-AR")} • {o.tipo_entrega==="retiro"?"Retiro":"Envío"}</p></div>
                   <div className="text-right"><p className="font-bold text-blue-600">{fmt(o.total)}</p><StatusBadge status={o.estado}/></div></div>
-                <p className="text-xs text-slate-400 mt-1">{(o.items||[]).length} productos — Tocá para ver detalle</p></div>;})}
+                <p className="text-xs text-slate-400 mt-1">{o.item_count||0} productos — Tocá para ver detalle</p></div>;})}
               {pedidos.filter(o=>orderFilter==="all"||o.estado===orderFilter).length===0&&<p className="text-center text-slate-400 py-8 text-sm">Sin pedidos</p>}
             </div></div>}
 
@@ -644,7 +663,7 @@ export default function App(){
           return<div key={o.id} className="bg-white border rounded-xl p-3 mb-2 cursor-pointer hover:shadow-md" onClick={()=>setViewOrder(o)}>
             <div className="flex justify-between items-start"><div><p className="font-semibold text-sm">{orderNum}</p><p className="text-xs text-slate-500">{new Date(o.fecha||o.created_at).toLocaleString("es-AR")}</p></div>
               <div className="text-right"><p className="font-bold text-blue-600">{fmt(o.total)}</p><StatusBadge status={o.estado}/></div></div>
-            <p className="text-xs text-slate-400 mt-1">{(o.items||[]).length} productos — Tocá para ver</p></div>;})}
+            <p className="text-xs text-slate-400 mt-1">{o.item_count||0} productos — Tocá para ver</p></div>;})}
       </div>}
 
       {view==="account"&&!vitrina&&user&&<AccountPanel user={user} userLista={userLista} config={config} doLogout={doLogout}/>}
@@ -655,7 +674,7 @@ export default function App(){
         <button key={id} onClick={()=>{setView(id);if(id==="admin")setAdminTab("home");}} className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl ${view===id?"text-blue-600":"text-slate-400"}`}>
           <Icon className="w-5 h-5"/><span className="text-[10px] font-medium">{label}</span></button>)}</div></nav>
 
-    {cartCount>0&&!showCart&&<button onClick={()=>setShowCart(true)} className="fixed bottom-20 right-4 z-30 bg-blue-600 text-white rounded-2xl px-4 py-3 shadow-lg shadow-blue-600/30 flex items-center gap-2">
+    {cartCount>0&&!showCart&&!vitrina&&<button onClick={()=>setShowCart(true)} className="fixed bottom-20 right-4 z-30 bg-blue-600 text-white rounded-2xl px-4 py-3 shadow-lg shadow-blue-600/30 flex items-center gap-2">
       <ShoppingCart className="w-5 h-5"/><span className="font-bold text-sm">{cartCount}</span><span className="text-xs opacity-80">|</span><span className="font-bold text-sm">{fmt(cartTotal)}</span></button>}
 
     {/* Sidebar */}
