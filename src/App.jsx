@@ -447,6 +447,10 @@ export default function App(){
   const ctxVal=useMemo(()=>({userLista,pfMap,cart,setCart,addToCart,isAdmin,setEditProduct,dolarBlue,showToast,listas,setListas,preciosFijos,setPreciosFijos,
     loadProductos,page,searchDebounced,catFilter,categorias,setCategorias,refreshAdmin,config,setConfig,mantForm,setMantForm,productos}),[userLista,pfMap,cart,addToCart,isAdmin,dolarBlue,listas,preciosFijos,page,searchDebounced,catFilter,categorias,config,mantForm,productos]);
 
+  const[darkMode,setDarkMode]=useState(()=>localStorage.getItem("darkMode")==="true");
+  const toggleDark=useCallback(()=>{const v=!darkMode;setDarkMode(v);localStorage.setItem("darkMode",v?"true":"false");},[darkMode]);
+  const matchingCats=useMemo(()=>{if(!searchDebounced||searchDebounced.length<2)return[];return categorias.filter(c=>c.toLowerCase().includes(searchDebounced.toLowerCase())).filter(c=>!catFilter||c!==catFilter);},[searchDebounced,categorias,catFilter]);
+
   if(authLoading)return<div className="flex items-center justify-center h-screen bg-slate-50"><Loader2 className="w-10 h-10 text-blue-600 animate-spin"/></div>;
   if(mantenimiento?.activo&&!isAdmin)return<div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-4"><div className="text-center max-w-md"><Settings className="w-16 h-16 text-amber-400 animate-spin mx-auto mb-6" style={{animationDuration:"3s"}}/><h1 className="text-2xl font-bold text-white mb-3">En mantenimiento</h1><p className="text-blue-200">{mantenimiento.mensaje||"Volvemos pronto."}</p></div></div>;
 
@@ -476,12 +480,6 @@ export default function App(){
           <button onClick={doRegister} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl">Registrarme</button></div>}
         {authMode==="login"&&<div className="mt-6 pt-4 border-t border-white/10"><button onClick={()=>setVitrina(true)} className="w-full py-3 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 rounded-xl text-sm font-medium flex items-center justify-center gap-2"><Eye className="w-4 h-4"/>Vitrina Pública</button></div>}
       </div></div></div>);
-
-  const[darkMode,setDarkMode]=useState(()=>localStorage.getItem("darkMode")==="true");
-  const toggleDark=()=>{const v=!darkMode;setDarkMode(v);localStorage.setItem("darkMode",v?"true":"false");};
-
-  // Matching categories for search suggestions
-  const matchingCats=useMemo(()=>{if(!searchDebounced||searchDebounced.length<2)return[];return categorias.filter(c=>c.toLowerCase().includes(searchDebounced.toLowerCase())).filter(c=>!catFilter||c!==catFilter);},[searchDebounced,categorias,catFilter]);
 
   /* ═══ MAIN VIEW ═══ */
   return(<Ctx.Provider value={ctxVal}><div className={`min-h-screen pb-20 ${darkMode?"bg-slate-900 text-slate-100":"bg-slate-50"}`}>
