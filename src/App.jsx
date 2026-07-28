@@ -346,7 +346,7 @@ export default function App(){
 
   const placeOrder=async()=>{if(!cartMeetsMin)return;setLoading(true);try{
     const items=cart.map(i=>({producto_id:i.id,categoria:i.categoria,modelo:i.modelo,nombre_producto:`${i.categoria} - ${i.modelo}`,cantidad:i.qty,precio_unitario:getPrice(i.precio_base,userLista,pfMap,i.id),precio_base:i.precio_base}));
-    await API.createPedido({items,total:cartTotal,tipo_entrega:checkoutType,direccion:checkoutAddr,notas:checkoutNotes});
+    await API.createPedido({items,total:cartTotal,tipo_entrega:checkoutType,direccion:checkoutAddr,notas:checkoutNotes,estado_pago:"pendiente"});
     if(config.whatsapp)window.open(`https://wa.me/${config.whatsapp}?text=${encodeURIComponent(`Hola, hice un pedido por ${fmt(cartTotal)} (${cartCount} items). ${checkoutType==="retiro"?"Retiro":"Envío"}.`)}`,"_blank");
     setCart([]);setCheckout(false);setShowCart(false);setCheckoutAddr("");setCheckoutNotes("");showToast("¡Pedido realizado!");
     const ords=await API.getPedidos().catch(()=>[]);setPedidos(Array.isArray(ords)?ords:[]);await loadProductos(page,searchDebounced,catFilter);
