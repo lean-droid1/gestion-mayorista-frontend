@@ -32,12 +32,13 @@ const ProductCard=memo(function ProductCard({p}){
     <div className="p-3">
       <p className="text-[10px] font-medium uppercase tracking-wide truncate" style={{color:cc}}>{p.categoria}</p>
       <p className="text-sm font-bold text-slate-800 mt-0.5 truncate" title={p.modelo}>{p.modelo}</p>
+      {p.compatibilidad&&<p className="text-[9px] text-slate-400 truncate" title={p.compatibilidad}>Compatible: {p.compatibilidad}</p>}
       {isVitrina?<div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-2 text-center"><p className="text-xs font-medium text-amber-700">¿Querés saber el precio?</p><p className="text-[10px] text-amber-600 mt-0.5">Ingresá o creá tu cuenta</p></div>
       :<><div className="flex items-center justify-between mt-2">
         <div><p className="text-lg font-bold" style={{color:userLista.color}}>{fmt(price)}</p>{dolarBlue&&<p className="text-[10px] text-slate-400">{fmtARS(price*dolarBlue)}</p>}</div>
         {isAdmin&&<button onClick={()=>setEditProduct(p)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500"><Edit2 className="w-3.5 h-3.5"/></button>}</div>
       <div className="flex items-center gap-1.5 mt-2">
-        <input type="number" min="1" value={inCart?inCart.qty:qty} onChange={e=>{const v=Math.max(1,parseInt(e.target.value)||1);if(!inCart)setQty(v);}} onBlur={e=>{if(inCart){const v=Math.max(1,parseInt(e.target.value)||1);const{setCart}=window.__ctx;setCart(prev=>prev.map(c=>c.id===p.id?{...c,qty:v}:c));}}}
+        <input type="number" min="1" value={inCart?inCart.qty:qty} onChange={e=>{const v=Math.max(1,parseInt(e.target.value)||1);if(inCart){window.__ctx.setCart(prev=>prev.map(c=>c.id===p.id?{...c,qty:v}:c));}else setQty(v);}}
           className="w-14 px-1.5 py-1.5 border rounded-lg text-center text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"/>
         <button onClick={()=>addToCart(p,inCart?0:qty)} disabled={!!inCart}
           className={`flex-1 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 ${inCart?"bg-blue-100 text-blue-700":"bg-blue-600 text-white hover:bg-blue-700"}`}>
@@ -49,9 +50,9 @@ const ProductCard=memo(function ProductCard({p}){
 function EditProductModal({product,onClose}){
   const{listas,preciosFijos,showToast,loadProductos,page,searchDebounced,catFilter,setPreciosFijos}=useContext(Ctx);const p=product;
   const[stk,setStk]=useState(p.stock||0);const[img,setImg]=useState(p.imagen||"");const[pb,setPb]=useState(p.precio_base||0);
-  const[modelo,setModelo]=useState(p.modelo||"");const[notas,setNotas]=useState(p.notas||"");const[sv,setSv]=useState(false);
+  const[modelo,setModelo]=useState(p.modelo||"");const[notas,setNotas]=useState(p.notas||"");const[compat,setCompat]=useState(p.compatibilidad||"");const[sv,setSv]=useState(false);
   const[fp,setFp]=useState(()=>{const o={};preciosFijos.filter(x=>x.producto_id===p.id).forEach(x=>{o[x.lista_precio_id]=x.precio_fijo});return o;});
-  const save=async()=>{setSv(true);try{await API.updateProducto(p.id,{stock:parseInt(stk)||0,imagen:img,precio_base:parseFloat(pb)||p.precio_base,modelo,notas});
+  const save=async()=>{setSv(true);try{await API.updateProducto(p.id,{stock:parseInt(stk)||0,imagen:img,precio_base:parseFloat(pb)||p.precio_base,modelo,notas,compatibilidad:compat});
     for(const l of listas){const v=fp[l.id];await API.setPrecioFijo(p.id,l.id,v&&v>0?v:0).catch(()=>{});}
     await loadProductos(page,searchDebounced,catFilter);const pf=await API.getPreciosFijos().catch(()=>[]);setPreciosFijos(Array.isArray(pf)?pf:[]);onClose();showToast("Actualizado");
   }catch(e){showToast("Error: "+e.message);}setSv(false);};
@@ -66,6 +67,8 @@ function EditProductModal({product,onClose}){
         <div><label className="text-sm font-medium text-slate-700 mb-1 block">Imagen URL</label><input className="w-full px-3 py-2.5 border rounded-xl text-sm" value={img} onChange={e=>setImg(e.target.value)}/>
           {img&&<img src={img} className="mt-2 h-20 object-contain rounded-lg" onError={e=>e.target.style.display="none"}/>}</div>
         <div><label className="text-sm font-medium text-slate-700 mb-1 block">Notas</label><input className="w-full px-3 py-2.5 border rounded-xl text-sm" value={notas} onChange={e=>setNotas(e.target.value)}/></div>
+        <div><label className="text-sm font-medium text-slate-700 mb-1 block">Compatibilidad</label><input className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="A11, A12, A20, A31..." value={compat} onChange={e=>setCompat(e.target.value)}/>
+          <p className="text-[10px] text-slate-400 mt-1">Modelos compatibles separados por coma. Se cruza con el buscador.</p></div>
         <div><label className="text-sm font-medium text-slate-700 mb-2 block">Precios fijos</label>
           {listas.map(t=><div key={t.id} className="flex items-center gap-2 mb-2"><span className="text-xs font-medium w-28 truncate" style={{color:t.color}}>{t.nombre}</span>
             <span className="text-xs text-slate-400 w-16">{fmt((parseFloat(pb)||0)*t.multiplicador)}</span>
@@ -172,7 +175,7 @@ function TierModal({tier,isNew,onClose}){
     :{...tier,modo:tier.modo||"multiplicador",compra_minima:tier.compra_minima||0,promo_msg:tier.promo_msg||""});
   const[iv,setIv]=useState(()=>f.modo==="porcentaje"?Math.round((f.multiplicador-1)*100):f.multiplicador);const[sv,setSv]=useState(false);
   const calcM=()=>f.modo==="porcentaje"?1+iv/100:iv;
-  const save=async()=>{if(!f.nombre)return;setSv(true);try{const obj={...f,multiplicador:calcM()};
+  const save=async()=>{if(!f.nombre)return;setSv(true);try{const m=calcM();const obj={...f,multiplicador:m,porcentaje:Math.round((m-1)*10000)/100};
     const upd=isNew?[...listas,{...obj,id:f.nombre.toLowerCase().replace(/\s/g,"_")}]:listas.map(t=>t.id===f.id?obj:t);
     await API.updateListas(upd);setListas(upd);onClose();showToast("Guardada");}catch(e){showToast("Error: "+e.message);}setSv(false);};
   return(<div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={e=>e.target===e.currentTarget&&onClose()}>
@@ -196,7 +199,7 @@ function TierModal({tier,isNew,onClose}){
 
 /* ── Order Detail Modal (with editing) ── */
 function OrderDetailModal({order,onClose,onUpdate,onPrint,onClone}){
-  const{userLista,pfMap,showToast}=useContext(Ctx);
+  const{userLista,pfMap,showToast,usuarios:allUsers,isAdmin}=useContext(Ctx);
   const o=order;if(!o)return null;
   const orderNum=typeof o.id==="number"?`#${String(o.id).padStart(4,"0")}`:`#${o.id}`;
   const[editing,setEditing]=useState(false);
@@ -231,6 +234,13 @@ function OrderDetailModal({order,onClose,onUpdate,onPrint,onClone}){
         <div className="flex items-center gap-2">{!editing&&<button onClick={()=>setEditing(true)} className="text-xs px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full font-medium flex items-center gap-1"><Edit2 className="w-3 h-3"/>Editar</button>}
           <button onClick={onClose}><X className="w-5 h-5"/></button></div></div>
       <div className="p-4 space-y-3">
+        {/* Presupuesto: assign to user */}
+        {o.tipo==="presupuesto"&&isAdmin&&<div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+          <p className="text-xs font-semibold text-amber-800">📋 Presupuesto — Asignar a cliente:</p>
+          <select className="w-full px-3 py-2 border rounded-xl text-sm" value={o.asignado_usuario_id||""} onChange={e=>{const uid=e.target.value?parseInt(e.target.value):null;onUpdate(o.id,{asignado_usuario_id:uid});}}>
+            <option value="">— Sin asignar —</option>{(allUsers||[]).filter(u=>u.rol!=="admin"&&u.estado!=="suspendido").map(u=><option key={u.id} value={u.id}>{u.nombre} (@{u.usuario})</option>)}</select>
+          {(o.asignado_nombre||o.asignado_usuario_id)&&<p className="text-xs text-amber-700">Asignado a: <b>{o.asignado_nombre||"—"}</b></p>}
+        </div>}
         {/* Customer info + WhatsApp */}
         <div className="flex items-center justify-between bg-slate-50 rounded-xl p-3">
           <div className="min-w-0 flex-1"><p className="font-semibold text-sm truncate">{o.usuario_nombre||o.cliente_nombre||"—"}</p>
@@ -278,9 +288,15 @@ function OrderDetailModal({order,onClose,onUpdate,onPrint,onClone}){
                 className={`px-2 py-1.5 rounded-lg text-[10px] font-semibold whitespace-nowrap transition-all ${isCurrent?"bg-blue-600 text-white shadow-sm":isActive?"bg-blue-100 text-blue-700":"bg-slate-100 text-slate-400 hover:bg-slate-200"}`}>{s}</button></React.Fragment>})}</div>}
           <div className="flex gap-2">{o.estado!=="cancelado"?<button onClick={()=>onUpdate(o.id,{estado:"cancelado"})} className="px-3 py-1.5 rounded-lg bg-red-50 text-red-600 text-xs font-medium hover:bg-red-100">✕ Cancelar pedido</button>
             :<button onClick={()=>onUpdate(o.id,{estado:"pendiente"})} className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium">↩ Reactivar</button>}
-            <button onClick={()=>onClone(o)} className="px-3 py-1.5 rounded-lg bg-blue-50 text-xs font-medium text-blue-600">Repetir</button></div>
-        <div className="flex gap-2">
-          {["A4","80mm","50mm","100mm"].map(f=><button key={f} onClick={()=>onPrint({...o,items},f)} className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-medium flex items-center justify-center gap-1"><Printer className="w-3 h-3"/>{f}</button>)}</div></>}
+            <button onClick={()=>onClone(o)} className="px-3 py-1.5 rounded-lg bg-blue-50 text-xs font-medium text-blue-600">Repetir</button>
+            {o.tipo==="presupuesto"&&<button onClick={()=>{onUpdate(o.id,{tipo:"pedido"});showToast("Convertido a pedido ✅");}} className="px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-700 text-xs font-medium">✅ Aprobar pedido</button>}</div>
+          <div className="flex gap-2">
+            {["A4","80mm","50mm","100mm"].map(f=><button key={f} onClick={()=>onPrint({...o,items},f)} className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-medium flex items-center justify-center gap-1"><Printer className="w-3 h-3"/>{f}</button>)}</div>
+          <div className="flex gap-2 pt-1 border-t border-slate-100">
+            <button onClick={async()=>{try{await API.archivarPedido(o.id);showToast("Archivado");onClose();const ords=await API.getPedidos().catch(()=>[]);window.__refreshPedidos?.(ords);}catch(e){showToast("Error: "+e.message);}}}
+              className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-medium text-slate-600">📦 Archivar</button>
+            <button onClick={async()=>{if(!confirm("¿Eliminar este pedido? Esta acción no se puede deshacer."))return;try{await API.deletePedido(o.id);showToast("Eliminado");onClose();const ords=await API.getPedidos().catch(()=>[]);window.__refreshPedidos?.(ords);}catch(e){showToast("Error: "+e.message);}}}
+              className="flex-1 py-2 bg-red-50 hover:bg-red-100 rounded-xl text-xs font-medium text-red-600">🗑 Eliminar</button></div></>}
       </div></div></div>);
 }
 
@@ -379,15 +395,17 @@ export default function App(){
   const[listas,setListas]=useState([]);const[config,setConfig]=useState({});const[usuarios,setUsuarios]=useState([]);
   const[pedidos,setPedidos]=useState([]);const[preciosFijos,setPreciosFijos]=useState([]);const[stats,setStats]=useState(null);
   const[pendientesCount,setPendientesCount]=useState(0);const[dolarBlue,setDolarBlue]=useState(null);const[mantenimiento,setMantenimiento]=useState(null);
-  const[view,setView]=useState("catalog");const[search,setSearch]=useState("");const[searchDebounced,setSearchDebounced]=useState("");
+  const[view,setView_]=useState(()=>localStorage.getItem("gm_view")||"catalog");const setView=v=>{setView_(v);localStorage.setItem("gm_view",v);};
+  const[search,setSearch]=useState("");const[searchDebounced,setSearchDebounced]=useState("");
   const[catFilter,setCatFilter]=useState("");const[brandFilter,setBrandFilter]=useState("");const[stockFilter,setStockFilter]=useState(false);
-  const[page,setPage]=useState(1);const[pageSize,setPageSize]=useState(60);const[showCats,setShowCats]=useState(false);
+  const[page,setPage_]=useState(()=>parseInt(localStorage.getItem("gm_page"))||1);const setPage=v=>{setPage_(v);localStorage.setItem("gm_page",String(v));};
+  const[pageSize,setPageSize]=useState(60);const[showCats,setShowCats]=useState(false);
   const[showCart,setShowCart]=useState(false);const[cart,setCart]=useState([]);const[checkout,setCheckout]=useState(false);
   const[checkoutType,setCheckoutType]=useState("retiro");const[checkoutAddr,setCheckoutAddr]=useState("");const[checkoutNotes,setCheckoutNotes]=useState("");const[checkoutPago,setCheckoutPago]=useState("");
   const[editProduct,setEditProduct]=useState(null);const[addProdModal,setAddProdModal]=useState(false);const[importModal,setImportModal]=useState(false);
   const[editUser,setEditUser]=useState(null);const[newUserModal,setNewUserModal]=useState(false);const[editTier,setEditTier]=useState(null);
   const[viewOrder,setViewOrder]=useState(null);
-  const[adminTab,setAdminTab]=useState("home");const[orderFilter,setOrderFilter]=useState("all");const[toast,setToast]=useState("");
+  const[adminTab,setAdminTab_]=useState(()=>localStorage.getItem("gm_atab")||"home");const setAdminTab=v=>{setAdminTab_(v);localStorage.setItem("gm_atab",v);};const[orderFilter,setOrderFilter]=useState("all");const[toast,setToast]=useState("");
   const[loading,setLoading]=useState(false);const[dataReady,setDataReady]=useState(false);const[presupuesto,setPresupuesto]=useState(false);
   const[authMode,setAuthMode]=useState("login");const[loginUser,setLoginUser]=useState("");const[loginPass,setLoginPass]=useState("");
   const[loginError,setLoginError]=useState("");const[showPass,setShowPass]=useState(false);
@@ -426,8 +444,8 @@ export default function App(){
   const loadProductos=useCallback(async(pg=1,q="",cat="")=>{setLoading(true);try{const r=await API.getProductos({q:q||undefined,categoria:cat||undefined,page:pg,limit:pageSize});
     setProductos(r.productos||r.data||r||[]);setTotalProductos(r.total??0);setPage(pg);}catch(e){console.error(e);}setLoading(false);},[pageSize]);
 
-  const refreshAdmin=useCallback(async()=>{if(!isAdmin)return;try{const[usrs,ords,pf,pC,st]=await Promise.all([API.getUsuarios(),API.getPedidos(),API.getPreciosFijos(),API.getUsuariosPendientesCount(),API.getStats()]);
-    setUsuarios(Array.isArray(usrs)?usrs:[]);setPedidos(Array.isArray(ords)?ords:[]);setPreciosFijos(Array.isArray(pf)?pf:[]);setPendientesCount(pC?.count||0);setStats(st);showToast("Actualizado");}catch(e){showToast("Error: "+e.message);}},[isAdmin,showToast]);
+  const refreshAdmin=useCallback(async(opts={})=>{if(!isAdmin)return;try{const[usrs,ords,pf,pC,st]=await Promise.all([API.getUsuarios(),API.getPedidos(opts.archivado?{archivado:true}:{}),API.getPreciosFijos(),API.getUsuariosPendientesCount(),API.getStats()]);
+    setUsuarios(Array.isArray(usrs)?usrs:[]);setPedidos(Array.isArray(ords)?ords:[]);setPreciosFijos(Array.isArray(pf)?pf:[]);setPendientesCount(pC?.count||0);setStats(st);}catch(e){showToast("Error: "+e.message);}},[isAdmin,showToast]);
 
   useEffect(()=>{if(searchTimer.current)clearTimeout(searchTimer.current);searchTimer.current=setTimeout(()=>setSearchDebounced(search),400);return()=>clearTimeout(searchTimer.current);},[search]);
   useEffect(()=>{if(!dataReady)return;setCatFilter("");setBrandFilter("");loadProductos(1,searchDebounced,"");},[searchDebounced]);
@@ -439,6 +457,7 @@ export default function App(){
   const addToCart=useCallback((p,qty=1)=>{if(qty===0)return;setCart(prev=>{const ex=prev.find(c=>c.id===p.id);if(ex)return prev.map(c=>c.id===p.id?{...c,qty:c.qty+qty}:c);return[...prev,{id:p.id,categoria:p.categoria,modelo:p.modelo,precio_base:p.precio_base,qty}];});showToast("Agregado");},[showToast]);
   // Expose setCart for ProductCard onBlur
   window.__ctx={setCart};
+  window.__refreshPedidos=ords=>{setPedidos(Array.isArray(ords)?ords:[]);};
 
   const doLogin=async()=>{setLoginError("");try{const u=await API.login(loginUser.toLowerCase().trim(),loginPass);setUser(u);setLoginUser("");setLoginPass("");setView("catalog");}catch(e){setLoginError(e.pendiente?"Pendiente de aprobación.":(e.message||"Error"));}};
   const doRegister=async()=>{setRegError("");if(!regForm.nombre||!regForm.apellido||!regForm.usuario||!regForm.password||!regForm.telefono||!regForm.email){setRegError("Todos los campos son obligatorios");return;}
@@ -496,7 +515,7 @@ export default function App(){
   const clientRanking=useMemo(()=>{const m={};pedidos.filter(o=>o.estado!=="cancelado").forEach(o=>{const k=o.usuario_nombre||"?";if(!m[k])m[k]={nombre:k,total:0,pedidos:0};m[k].total+=Number(o.total)||0;m[k].pedidos++;});return Object.values(m).sort((a,b)=>b.total-a.total);},[pedidos]);
 
   const ctxVal=useMemo(()=>({userLista,pfMap,cart,setCart,addToCart,isAdmin,setEditProduct,dolarBlue,showToast,listas,setListas,preciosFijos,setPreciosFijos,
-    loadProductos,page,searchDebounced,catFilter,categorias,setCategorias,refreshAdmin,config,setConfig,mantForm,setMantForm,productos,vitrina}),[userLista,pfMap,cart,addToCart,isAdmin,dolarBlue,listas,preciosFijos,page,searchDebounced,catFilter,categorias,config,mantForm,productos,vitrina]);
+    loadProductos,page,searchDebounced,catFilter,categorias,setCategorias,refreshAdmin,config,setConfig,mantForm,setMantForm,productos,vitrina,usuarios}),[userLista,pfMap,cart,addToCart,isAdmin,dolarBlue,listas,preciosFijos,page,searchDebounced,catFilter,categorias,config,mantForm,productos,vitrina,usuarios]);
 
   const[darkMode,setDarkMode]=useState(()=>localStorage.getItem("darkMode")==="true");
   const toggleDark=useCallback(()=>{const v=!darkMode;setDarkMode(v);localStorage.setItem("darkMode",v?"true":"false");},[darkMode]);
@@ -662,19 +681,23 @@ export default function App(){
           </div>}
 
           {adminTab==="orders"&&<div>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex gap-1 overflow-x-auto">{["all","pendiente","preparando","listo","entregado","cancelado"].map(s=><button key={s} onClick={()=>setOrderFilter(s)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap ${orderFilter===s?"bg-blue-600 text-white":"bg-slate-100 text-slate-600"}`}>{s==="all"?"Todos":s}</button>)}</div>
-              <button onClick={exportOrders} className="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-xl text-xs font-medium flex items-center gap-1"><Download className="w-3 h-3"/>Excel</button></div>
-            <div className="space-y-2 max-h-[60vh] overflow-y-auto">{pedidos.filter(o=>orderFilter==="all"||o.estado===orderFilter).map(o=>{
+            <div className="flex gap-2 mb-3"><button onClick={()=>setOrderFilter(orderFilter==="presupuestos"?"all":"presupuestos")}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium ${orderFilter==="presupuestos"?"bg-amber-600 text-white":"bg-amber-100 text-amber-700"}`}>📋 Presupuestos</button>
+              <button onClick={()=>{const nv=orderFilter==="archivados"?"all":"archivados";setOrderFilter(nv);refreshAdmin(nv==="archivados"?{archivado:true}:{});}}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium ${orderFilter==="archivados"?"bg-slate-600 text-white":"bg-slate-100 text-slate-600"}`}>📦 Archivados</button>
+              <button onClick={exportOrders} className="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-xl text-xs font-medium flex items-center gap-1 ml-auto"><Download className="w-3 h-3"/>Excel</button></div>
+            {orderFilter!=="presupuestos"&&orderFilter!=="archivados"&&<div className="flex gap-1 overflow-x-auto mb-3">{["all","pendiente","preparando","listo","entregado","cancelado"].map(s=><button key={s} onClick={()=>setOrderFilter(s)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap ${orderFilter===s?"bg-blue-600 text-white":"bg-slate-100 text-slate-600"}`}>{s==="all"?"Todos":s}</button>)}</div>}
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto">{(orderFilter==="presupuestos"?pedidos.filter(o=>o.tipo==="presupuesto"):orderFilter==="archivados"?pedidos:pedidos.filter(o=>o.tipo!=="presupuesto")).filter(o=>orderFilter==="all"||orderFilter==="presupuestos"||orderFilter==="archivados"||o.estado===orderFilter).map(o=>{
               const orderNum=typeof o.id==="number"?`#${String(o.id).padStart(4,"0")}`:`#${o.id}`;
-              return<div key={o.id} className="bg-white border rounded-xl p-3 cursor-pointer hover:shadow-md" onClick={()=>setViewOrder(o)}>
+              return<div key={o.id} className={`bg-white border rounded-xl p-3 cursor-pointer hover:shadow-md ${o.tipo==="presupuesto"?"border-amber-300":""}`} onClick={()=>setViewOrder(o)}>
                 <div className="flex justify-between items-start">
                   <div><p className="font-semibold text-sm">{orderNum} — {o.usuario_nombre||o.cliente_nombre||"—"}</p>
                     <p className="text-xs text-slate-500">{new Date(o.fecha||o.created_at).toLocaleString("es-AR")} • {o.tipo_entrega==="retiro"?"Retiro":"Envío"}</p></div>
-                  <div className="text-right"><p className="font-bold text-blue-600">{fmt(o.total)}</p><StatusBadge status={o.estado}/></div></div>
-                <p className="text-xs text-slate-400 mt-1">{o.item_count||0} productos — Tocá para ver detalle</p></div>;})}
-              {pedidos.filter(o=>orderFilter==="all"||o.estado===orderFilter).length===0&&<p className="text-center text-slate-400 py-8 text-sm">Sin pedidos</p>}
+                  <div className="text-right"><p className="font-bold text-blue-600">{fmt(o.total)}</p>
+                    {o.tipo==="presupuesto"?<span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">Presupuesto</span>:<StatusBadge status={o.estado}/>}</div></div>
+                <p className="text-xs text-slate-400 mt-1">{o.item_count||0} productos{o.metodo_pago?` • ${o.metodo_pago}`:""}</p></div>;})}
+              {(orderFilter==="presupuestos"?pedidos.filter(o=>o.tipo==="presupuesto"):orderFilter==="archivados"?pedidos:pedidos.filter(o=>o.tipo!=="presupuesto")).filter(o=>orderFilter==="all"||orderFilter==="presupuestos"||orderFilter==="archivados"||o.estado===orderFilter).length===0&&<p className="text-center text-slate-400 py-8 text-sm">{orderFilter==="presupuestos"?"Sin presupuestos":orderFilter==="archivados"?"Sin archivados":"Sin pedidos"}</p>}
             </div></div>}
 
           {adminTab==="tiers"&&<div>
@@ -763,8 +786,15 @@ export default function App(){
                   <button onClick={()=>setCart(prev=>prev.filter(c=>c.id!==item.id))} className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center text-red-500"><Trash2 className="w-3.5 h-3.5"/></button></div></div>);})}</div>
           {cart.length>0&&<div className="p-4 border-t shrink-0"><div className="flex justify-between text-lg mb-3"><span className="font-bold">Total</span><span className="font-bold text-blue-600">{fmt(cartTotal)}</span></div>
             <div className="flex gap-2">{!presupuesto&&<button onClick={()=>setCheckout(true)} className="flex-1 py-3 bg-blue-600 text-white font-semibold rounded-xl">Finalizar</button>}
-              {presupuesto&&<button onClick={()=>printRemito({id:"PRESUP",items:cart.map(i=>({categoria:i.categoria,modelo:i.modelo,cantidad:i.qty,precio_unitario:getPrice(i.precio_base,userLista,pfMap,i.id)})),total:cartTotal,tipo_entrega:"",fecha:new Date().toISOString()},"A4")}
-                className="flex-1 py-3 bg-amber-600 text-white font-semibold rounded-xl flex items-center justify-center gap-2"><Printer className="w-4 h-4"/>Imprimir</button>}
+              {presupuesto&&<><button onClick={async()=>{setLoading(true);try{
+                const items=cart.map(i=>{const pu=getPrice(i.precio_base,userLista,pfMap,i.id);return{producto_id:i.id,categoria:i.categoria,modelo:i.modelo,nombre_producto:`${i.categoria} - ${i.modelo}`,cantidad:i.qty,precio_unitario:pu,precio_base:i.precio_base,subtotal:pu*i.qty};});
+                await API.createPedido({items,total:cartTotal,tipo_entrega:"retiro",notas:checkoutNotes,estado_pago:"pendiente",tipo:"presupuesto"});
+                setCart([]);setShowCart(false);setCheckoutNotes("");showToast("Presupuesto guardado ✅");
+                const ords=await API.getPedidos().catch(()=>[]);setPedidos(Array.isArray(ords)?ords:[]);
+              }catch(e){showToast("Error: "+e.message);}setLoading(false);}}
+                className="flex-1 py-3 bg-amber-600 text-white font-semibold rounded-xl flex items-center justify-center gap-2" disabled={loading}>{loading?<Loader2 className="w-4 h-4 animate-spin"/>:<Save className="w-4 h-4"/>}Guardar</button>
+              <button onClick={()=>printRemito({id:"PRESUP",items:cart.map(i=>({categoria:i.categoria,modelo:i.modelo,nombre_producto:`${i.categoria} - ${i.modelo}`,cantidad:i.qty,precio_unitario:getPrice(i.precio_base,userLista,pfMap,i.id)})),total:cartTotal,tipo_entrega:"",fecha:new Date().toISOString(),estado_pago:"pendiente",tipo:"presupuesto"},"A4")}
+                className="py-3 px-3 bg-amber-100 text-amber-700 rounded-xl"><Printer className="w-4 h-4"/></button></>}
               <button onClick={shareCart} className="py-3 px-3 bg-slate-100 rounded-xl"><Share2 className="w-4 h-4"/></button>
               <button onClick={()=>setCart([])} className="py-3 px-3 bg-red-50 text-red-600 rounded-xl text-sm">Vaciar</button></div></div>}
         </>}

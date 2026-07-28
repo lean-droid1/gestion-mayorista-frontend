@@ -241,8 +241,12 @@ export async function deleteUsuario(id) {
 // ══════════════════════════════════════
 // PEDIDOS
 // ══════════════════════════════════════
-export async function getPedidos() {
-  return api('/api/pedidos');
+export async function getPedidos(params = {}) {
+  const qs = new URLSearchParams();
+  if (params.tipo) qs.set('tipo', params.tipo);
+  if (params.archivado) qs.set('archivado', 'true');
+  const suffix = qs.toString() ? `?${qs}` : '';
+  return api(`/api/pedidos${suffix}`);
 }
 
 export async function getPedido(id) {
@@ -255,6 +259,14 @@ export async function createPedido(pedido) {
 
 export async function updatePedido(id, datos) {
   return api(`/api/pedidos/${id}`, { method: 'PUT', body: JSON.stringify(datos) });
+}
+
+export async function archivarPedido(id) {
+  return api(`/api/pedidos/${id}/archivar`, { method: 'POST' });
+}
+
+export async function desarchivarPedido(id) {
+  return api(`/api/pedidos/${id}/desarchivar`, { method: 'POST' });
 }
 
 export async function deletePedido(id) {
