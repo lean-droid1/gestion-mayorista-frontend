@@ -127,7 +127,9 @@ function UserModal({u,isNew,onClose}){
     if(isNew)await API.register(datos);else await API.updateUsuario(u.id,datos);
     showToast(isNew?"Creado":"Actualizado");onClose();await refreshAdmin();
   }catch(e){showToast("Error: "+e.message);}setSv(false);};
-  const aprobar=async lid=>{setSv(true);try{await API.aprobarUsuario(u.id,lid);showToast("Aprobado");onClose();await refreshAdmin();}catch(e){showToast("Error: "+e.message);}setSv(false);};
+  const aprobar=async lid=>{setSv(true);try{await API.aprobarUsuario(u.id,lid);showToast("Aprobado");
+    if(u.telefono){const msg=`Hola ${u.nombre}, tu cuenta en ${document.title||"el catálogo"} ya está activa. Tu usuario es: *${u.usuario}*`;window.open(`https://wa.me/54${u.telefono.replace(/\D/g,"")}?text=${encodeURIComponent(msg)}`,"_blank");}
+    onClose();await refreshAdmin();}catch(e){showToast("Error: "+e.message);}setSv(false);};
   const rechazar=async()=>{setSv(true);try{await API.rechazarUsuario(u.id);showToast("Rechazado");onClose();await refreshAdmin();}catch(e){showToast("Error: "+e.message);}setSv(false);};
   return(<div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={e=>e.target===e.currentTarget&&onClose()}>
     <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl p-4 space-y-3 max-h-[90vh] overflow-y-auto">
@@ -148,6 +150,8 @@ function UserModal({u,isNew,onClose}){
         <select className="w-full px-3 py-2.5 border rounded-xl text-sm" value={f.rol} onChange={e=>setF({...f,rol:e.target.value})}><option value="client">Cliente</option><option value="admin">Admin</option></select>
         <select className="w-full px-3 py-2.5 border rounded-xl text-sm" value={f.lista_precio_id} onChange={e=>setF({...f,lista_precio_id:e.target.value})}>
           {listas.map(l=><option key={l.id} value={l.id}>{l.nombre}</option>)}</select>
+        {!isNew&&<label className="flex items-center gap-3 py-2 cursor-pointer"><input type="checkbox" checked={f.activo!==false&&f.activo!=="false"} onChange={e=>setF({...f,activo:e.target.checked})} className="w-5 h-5 rounded"/>
+          <span className="text-sm font-medium">{f.activo!==false&&f.activo!=="false"?"✅ Cuenta activa":"🔴 Cuenta suspendida"}</span></label>}
         <button onClick={save} disabled={sv} className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl disabled:opacity-50">{sv?"Guardando...":"Guardar"}</button>
       </div>)}
     </div></div>);
@@ -182,29 +186,70 @@ function TierModal({tier,isNew,onClose}){
     </div></div>);
 }
 
-/* ── Order Detail Modal ── */
+/* ── Order Detail Modal (with editing) ── */
 function OrderDetailModal({order,onClose,onUpdate,onPrint,onClone}){
-  const[printing,setPrinting]=useState(false);
+  const{productos:allProds,userLista,pfMap,showToast}=useContext(Ctx);
   const o=order;if(!o)return null;
   const orderNum=typeof o.id==="number"?`#${String(o.id).padStart(4,"0")}`:`#${o.id}`;
+  const[editing,setEditing]=useState(false);
+  const[items,setItems]=useState((o.items||[]).map(i=>({...i,qty:i.cantidad||i.qty||1})));
+  const[addSearch,setAddSearch]=useState("");
+  const[saving,setSaving]=useState(false);
+  const editTotal=items.reduce((s,i)=>s+(Number(i.precio_unitario)||0)*(i.qty||0),0);
+  const searchResults=addSearch.length>=2?allProds.filter(p=>(p.modelo||"").toLowerCase().includes(addSearch.toLowerCase())||(p.categoria||"").toLowerCase().includes(addSearch.toLowerCase())).slice(0,8):[];
+
+  const saveEdit=async()=>{setSaving(true);try{
+    const newItems=items.map(i=>({producto_id:i.producto_id||i.id,categoria:i.categoria,modelo:i.modelo,nombre_producto:`${i.categoria} - ${i.modelo}`,cantidad:i.qty,precio_unitario:Number(i.precio_unitario)||0,precio_base:Number(i.precio_base)||0}));
+    await onUpdate(o.id,{items:newItems,total:editTotal});setEditing(false);showToast("Pedido actualizado");
+  }catch(e){showToast("Error: "+(e?.message||e));}setSaving(false);};
+
+  const addItem=(p)=>{const price=userLista?getPrice(p.precio_base,userLista,pfMap,p.id):p.precio_base;
+    setItems(prev=>{const ex=prev.find(i=>(i.producto_id||i.id)===p.id);if(ex)return prev.map(i=>(i.producto_id||i.id)===p.id?{...i,qty:i.qty+1}:i);
+    return[...prev,{producto_id:p.id,categoria:p.categoria,modelo:p.modelo,precio_unitario:price,precio_base:p.precio_base,qty:1}];});setAddSearch("");};
+
   return(<div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={e=>e.target===e.currentTarget&&onClose()}>
     <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto">
-      <div className="p-4 border-b sticky top-0 bg-white flex justify-between items-center"><h3 className="font-bold">Pedido {orderNum}</h3><button onClick={onClose}><X className="w-5 h-5"/></button></div>
+      <div className="p-4 border-b sticky top-0 bg-white flex justify-between items-center"><h3 className="font-bold">Pedido {orderNum}</h3>
+        <div className="flex items-center gap-2">{!editing&&<button onClick={()=>setEditing(true)} className="text-xs px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full font-medium flex items-center gap-1"><Edit2 className="w-3 h-3"/>Editar</button>}
+          <button onClick={onClose}><X className="w-5 h-5"/></button></div></div>
       <div className="p-4 space-y-3">
         <div className="flex justify-between items-start"><div><p className="font-semibold">{o.usuario_nombre||"—"}</p>
           <p className="text-xs text-slate-500">{new Date(o.fecha||o.created_at).toLocaleString("es-AR")}</p>
           <p className="text-xs text-slate-500">{o.tipo_entrega==="retiro"?"📦 Retiro":"🚚 Envío"} {o.direccion||""}</p></div>
-          <div className="text-right"><p className="text-xl font-bold text-blue-600">{fmt(o.total)}</p><StatusBadge status={o.estado}/></div></div>
+          <div className="text-right"><p className="text-xl font-bold text-blue-600">{editing?fmt(editTotal):fmt(o.total)}</p><StatusBadge status={o.estado}/>
+            <p className={`text-xs font-medium mt-1 ${o.estado_pago==="pagado"?"text-emerald-600":"text-red-500"}`}>{o.estado_pago==="pagado"?"💰 Pagado":"⏳ Impago"}</p></div></div>
+        <div className="flex gap-2"><button onClick={()=>onUpdate(o.id,{estado_pago:o.estado_pago==="pagado"?"pendiente":"pagado"})}
+          className={`flex-1 py-2 rounded-xl text-sm font-medium border-2 ${o.estado_pago==="pagado"?"border-emerald-500 bg-emerald-50 text-emerald-700":"border-red-300 bg-red-50 text-red-600"}`}>
+          {o.estado_pago==="pagado"?"✅ Pagado — marcar impago":"❌ Impago — marcar pagado"}</button></div>
         {o.notas&&<p className="text-sm text-slate-500 italic bg-slate-50 rounded-lg p-2">Nota: {o.notas}</p>}
-        <table className="w-full text-sm"><thead><tr className="border-b"><th className="text-left py-1">Producto</th><th className="text-center">Cant</th><th className="text-right">Subtotal</th></tr></thead>
+
+        {/* Items table */}
+        {editing?<div className="space-y-2">
+          {items.map((i,idx)=><div key={idx} className="flex items-center gap-2 bg-slate-50 rounded-lg p-2">
+            <div className="flex-1 min-w-0"><p className="text-xs text-slate-500 truncate">{i.categoria}</p><p className="text-sm font-medium truncate">{i.modelo}</p>
+              <p className="text-xs text-blue-600">{fmt(Number(i.precio_unitario)||0)}</p></div>
+            <input type="number" min="1" value={i.qty} onChange={e=>setItems(prev=>prev.map((x,j)=>j===idx?{...x,qty:Math.max(1,parseInt(e.target.value)||1)}:x))}
+              className="w-14 px-1 py-1.5 border rounded-lg text-center text-sm"/>
+            <button onClick={()=>setItems(prev=>prev.filter((_,j)=>j!==idx))} className="p-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100"><Trash2 className="w-3.5 h-3.5"/></button></div>)}
+          {/* Add product search */}
+          <div className="relative"><input className="w-full px-3 py-2 border rounded-xl text-sm" placeholder="Buscar producto para agregar..." value={addSearch} onChange={e=>setAddSearch(e.target.value)}/>
+            {searchResults.length>0&&<div className="absolute left-0 right-0 top-full mt-1 bg-white border rounded-xl shadow-lg max-h-48 overflow-y-auto z-10">
+              {searchResults.map(p=><button key={p.id} onClick={()=>addItem(p)} className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 border-b border-slate-50">
+                <span className="text-xs text-slate-400">{p.categoria}</span> — <span className="font-medium">{p.modelo}</span></button>)}</div>}</div>
+          <div className="flex gap-2"><button onClick={saveEdit} disabled={saving||!items.length} className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-1.5">
+              {saving?<Loader2 className="w-4 h-4 animate-spin"/>:<Save className="w-4 h-4"/>}{saving?"Guardando...":"Guardar cambios"}</button>
+            <button onClick={()=>{setItems((o.items||[]).map(i=>({...i,qty:i.cantidad||i.qty||1})));setEditing(false);}} className="py-2.5 px-4 bg-slate-100 rounded-xl text-sm">Cancelar</button></div>
+        </div>
+        :<table className="w-full text-sm"><thead><tr className="border-b"><th className="text-left py-1">Producto</th><th className="text-center">Cant</th><th className="text-right">Subtotal</th></tr></thead>
           <tbody>{(o.items||[]).map((i,idx)=><tr key={idx} className="border-b border-slate-50"><td className="py-1.5">{i.categoria} - {i.modelo}</td>
-            <td className="text-center">{i.cantidad||i.qty}</td><td className="text-right">{fmt((Number(i.precio_unitario)||0)*(i.cantidad||i.qty))}</td></tr>)}</tbody></table>
-        <div className="flex gap-2 flex-wrap">
+            <td className="text-center">{i.cantidad||i.qty}</td><td className="text-right">{fmt((Number(i.precio_unitario)||0)*(i.cantidad||i.qty))}</td></tr>)}</tbody></table>}
+
+        {!editing&&<><div className="flex gap-2 flex-wrap">
           {["pendiente","preparando","listo","entregado","cancelado"].filter(s=>s!==o.estado).map(s=>
             <button key={s} onClick={()=>onUpdate(o.id,{estado:s})} className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-medium">→ {s}</button>)}
           <button onClick={()=>onClone(o)} className="px-2 py-1 rounded-lg bg-blue-50 text-xs font-medium text-blue-600">Repetir</button></div>
         <div className="flex gap-2">
-          {["A4","80mm","50mm","100mm"].map(f=><button key={f} onClick={()=>onPrint(o,f)} className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-medium flex items-center justify-center gap-1"><Printer className="w-3 h-3"/>{f}</button>)}</div>
+          {["A4","80mm","50mm","100mm"].map(f=><button key={f} onClick={()=>onPrint(o,f)} className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-medium flex items-center justify-center gap-1"><Printer className="w-3 h-3"/>{f}</button>)}</div></>}
       </div></div></div>);
 }
 
@@ -341,13 +386,16 @@ export default function App(){
 
   const doLogin=async()=>{setLoginError("");try{const u=await API.login(loginUser.toLowerCase().trim(),loginPass);setUser(u);setLoginUser("");setLoginPass("");setView("catalog");}catch(e){setLoginError(e.pendiente?"Pendiente de aprobación.":(e.message||"Error"));}};
   const doRegister=async()=>{setRegError("");if(!regForm.nombre||!regForm.apellido||!regForm.usuario||!regForm.password||!regForm.telefono||!regForm.email){setRegError("Todos los campos son obligatorios");return;}
-    try{const r=await API.register({...regForm,nombre:`${regForm.nombre} ${regForm.apellido}`});setRegMsg(r.mensaje||"Enviado. El admin revisará tu cuenta.");setAuthMode("pendiente");}catch(e){setRegError(e.message||"Error");}};
+    try{const r=await API.register({...regForm,nombre:`${regForm.nombre} ${regForm.apellido}`});setRegMsg(r.mensaje||"Enviado. El admin revisará tu cuenta.");setAuthMode("pendiente");
+      const adminWa=config.whatsapp||"";if(adminWa){window.open(`https://wa.me/${adminWa}?text=${encodeURIComponent(`Hola, me registré en el catálogo:\nNombre: ${regForm.nombre} ${regForm.apellido}\nUsuario: ${regForm.usuario}\nTel: ${regForm.telefono}\nQuedo a la espera de aprobación`)}`,"_blank");}
+    }catch(e){setRegError(e.message||"Error");}};
   const doLogout=()=>{API.logout();setUser(null);setVitrina(false);setCart([]);setView("catalog");setDataReady(false);setProductos([]);};
 
   const placeOrder=async()=>{if(!cartMeetsMin)return;setLoading(true);try{
     const items=cart.map(i=>({producto_id:i.id,categoria:i.categoria,modelo:i.modelo,nombre_producto:`${i.categoria} - ${i.modelo}`,cantidad:i.qty,precio_unitario:getPrice(i.precio_base,userLista,pfMap,i.id),precio_base:i.precio_base}));
-    await API.createPedido({items,total:cartTotal,tipo_entrega:checkoutType,direccion:checkoutAddr,notas:checkoutNotes,estado_pago:"pendiente"});
-    if(config.whatsapp)window.open(`https://wa.me/${config.whatsapp}?text=${encodeURIComponent(`Hola, hice un pedido por ${fmt(cartTotal)} (${cartCount} items). ${checkoutType==="retiro"?"Retiro":"Envío"}.`)}`,"_blank");
+    const res=await API.createPedido({items,total:cartTotal,tipo_entrega:checkoutType,direccion:checkoutAddr,notas:checkoutNotes,estado_pago:"pendiente"});
+    const ordId=res?.id||res?.pedido?.id||"";const ordNum=ordId?`#${String(ordId).padStart(4,"0")}`:"";
+    if(config.whatsapp){const msg=`Hola soy *${user?.nombre||"cliente"}*\nPedido ${ordNum}\nTotal: *${fmt(cartTotal)}* (${cartCount} items)\nEntrega: ${checkoutType==="retiro"?"Retiro en local":"Envío"}`;window.open(`https://wa.me/${config.whatsapp}?text=${encodeURIComponent(msg)}`,"_blank");}
     setCart([]);setCheckout(false);setShowCart(false);setCheckoutAddr("");setCheckoutNotes("");showToast("¡Pedido realizado!");
     const ords=await API.getPedidos().catch(()=>[]);setPedidos(Array.isArray(ords)?ords:[]);await loadProductos(page,searchDebounced,catFilter);
   }catch(e){showToast("Error: "+e.message);}setLoading(false);};
@@ -412,14 +460,31 @@ export default function App(){
         {authMode==="login"&&<div className="mt-6 pt-4 border-t border-white/10"><button onClick={()=>setVitrina(true)} className="w-full py-3 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 rounded-xl text-sm font-medium flex items-center justify-center gap-2"><Eye className="w-4 h-4"/>Vitrina Pública</button></div>}
       </div></div></div>);
 
+  const[darkMode,setDarkMode]=useState(()=>localStorage.getItem("darkMode")==="true");
+  const toggleDark=()=>{const v=!darkMode;setDarkMode(v);localStorage.setItem("darkMode",v?"true":"false");};
+
+  // Matching categories for search suggestions
+  const matchingCats=useMemo(()=>{if(!searchDebounced||searchDebounced.length<2)return[];return categorias.filter(c=>c.toLowerCase().includes(searchDebounced.toLowerCase())).filter(c=>!catFilter||c!==catFilter);},[searchDebounced,categorias,catFilter]);
+
   /* ═══ MAIN VIEW ═══ */
-  return(<Ctx.Provider value={ctxVal}><div className="min-h-screen bg-slate-50 pb-20">
+  return(<Ctx.Provider value={ctxVal}><div className={`min-h-screen pb-20 ${darkMode?"bg-slate-900 text-slate-100":"bg-slate-50"}`}>
+    <style>{darkMode?`
+      .bg-white{background:#1e293b!important;color:#e2e8f0!important}
+      .bg-slate-50,.bg-slate-100{background:#0f172a!important}
+      .border,.border-b,.border-t,.border-slate-100,.border-slate-50{border-color:#334155!important}
+      .text-slate-800,.text-slate-700,.text-slate-600{color:#e2e8f0!important}
+      .text-slate-500,.text-slate-400{color:#94a3b8!important}
+      .bg-gradient-to-r{background:linear-gradient(to right,#0f172a,#1e3a5f)!important}
+      input,select,textarea{background:#1e293b!important;color:#e2e8f0!important;border-color:#475569!important}
+      .hover\\:shadow-md:hover{box-shadow:0 4px 6px rgba(0,0,0,.3)!important}
+    `:""}</style>
     <div className="bg-gradient-to-r from-slate-800 to-blue-900 text-white px-4 py-2 flex items-center justify-between">
       <div className="flex items-center gap-2">{config.logo?<img src={config.logo} className="h-6 object-contain"/>:<Store className="w-4 h-4"/>}
         <span className="font-bold text-sm">{config.nombre_negocio||"Mi Depósito"}</span>
         {vitrina&&<span className="text-[10px] bg-amber-500 px-1.5 py-0.5 rounded-full font-medium">VITRINA</span>}
         {dolarBlue&&<span className="text-[10px] bg-white/15 px-1.5 py-0.5 rounded-full">Blue: {fmtARS(dolarBlue)}</span>}</div>
       <div className="flex items-center gap-2 text-xs">{!vitrina&&user&&<>{userLista&&<span className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{backgroundColor:userLista.color+"33",color:userLista.color}}>{userLista.nombre}</span>}</>}
+        <button onClick={toggleDark} className="p-1.5 rounded-lg hover:bg-white/10" title="Modo oscuro">{darkMode?"☀️":"🌙"}</button>
         <button onClick={doLogout} className="p-1.5 rounded-lg hover:bg-white/10"><LogOut className="w-4 h-4"/></button></div></div>
 
     <header className="sticky top-0 z-40 bg-white border-b"><div className="flex items-center gap-2 px-3 py-2">
@@ -436,11 +501,19 @@ export default function App(){
 
     <main>
       {view==="catalog"&&<div className="p-3">
+        {/* Info pagos/envíos arriba */}
+        {(config.info_pagos||config.info_envios)&&<div className="flex gap-2 mb-3 overflow-x-auto">
+          {config.info_pagos&&<div className="bg-blue-50 border border-blue-200 rounded-xl p-2.5 text-xs text-blue-800 whitespace-nowrap flex-shrink-0"><span className="font-bold">💳 Pagos:</span> {config.info_pagos}</div>}
+          {config.info_envios&&<div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-xs text-amber-800 whitespace-nowrap flex-shrink-0"><span className="font-bold">🚚 Envíos:</span> {config.info_envios}</div>}</div>}
         {loading&&!productos.length?<div className="text-center py-16"><Loader2 className="w-8 h-8 text-blue-500 animate-spin mx-auto"/></div>
-        :displayProducts.length===0?<div className="text-center py-16 text-slate-400"><Search className="w-12 h-12 mx-auto mb-3 opacity-30"/><p>Sin resultados</p><button onClick={()=>{setSearch("");setCatFilter("");setBrandFilter("");}} className="mt-3 text-sm text-blue-600 underline">Ver todos</button></div>
+        :displayProducts.length===0?<div className="text-center py-16 text-slate-400"><Search className="w-12 h-12 mx-auto mb-3 opacity-30"/><p>Sin resultados</p>
+          {matchingCats.length>0&&<div className="mt-3"><p className="text-sm text-slate-500 mb-2">Categorías que coinciden:</p>{matchingCats.map(c=><button key={c} onClick={()=>{setCatFilter(c);setSearch("");}} className="text-sm px-3 py-1.5 rounded-full bg-blue-100 text-blue-700 mr-1 mb-1">{c}</button>)}</div>}
+          <button onClick={()=>{setSearch("");setCatFilter("");setBrandFilter("");}} className="mt-3 text-sm text-blue-600 underline">Ver todos</button></div>
         :<>
-          {crossResults&&<div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-3"><p className="text-sm text-blue-800 font-medium">"{searchDebounced}" en {crossResults.categories.length} categorías</p>
-            <div className="flex flex-wrap gap-1 mt-2">{crossResults.categories.map(([cat,items])=><button key={cat} onClick={()=>{setCatFilter(cat);setBrandFilter("");}} className="text-xs px-2 py-1 rounded-full bg-white border border-blue-200 text-blue-700 hover:bg-blue-100"><span className="w-2 h-2 rounded-full inline-block mr-1" style={{backgroundColor:getCatColor(cat)}}/>{cat} ({items.length})</button>)}</div></div>}
+          {/* Matching categories suggestions */}
+          {matchingCats.length>0&&!catFilter&&<div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-3"><p className="text-xs text-blue-800 font-medium mb-1.5">Categorías con "{searchDebounced}":</p>
+            <div className="flex flex-wrap gap-1">{matchingCats.map(c=><button key={c} onClick={()=>{setCatFilter(c);setBrandFilter("");}} className="text-xs px-2.5 py-1 rounded-full bg-white border border-blue-200 text-blue-700 hover:bg-blue-100"><span className="w-2 h-2 rounded-full inline-block mr-1" style={{backgroundColor:getCatColor(c)}}/>{c}</button>)}</div></div>}
+          {crossResults&&<div className="bg-slate-100 rounded-xl p-2.5 mb-3"><div className="flex flex-wrap gap-1">{crossResults.categories.map(([cat,items])=><button key={cat} onClick={()=>{setCatFilter(cat);setBrandFilter("");}} className="text-xs px-2 py-1 rounded-full bg-white border text-slate-700 hover:bg-blue-50">{cat} ({items.length})</button>)}</div></div>}
           <div className="flex items-center justify-between mb-2"><p className="text-xs text-slate-400">{totalProductos} productos</p>
             <div className="flex items-center gap-2">
               {showStockBtn&&<button onClick={()=>setStockFilter(!stockFilter)} className={`text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1 ${stockFilter?"bg-emerald-100 text-emerald-700":"bg-slate-100 text-slate-500"}`}><Filter className="w-3 h-3"/>{stockFilter?"Con stock":"Stock"}</button>}
@@ -492,12 +565,12 @@ export default function App(){
               {usuarios.filter(u=>u.estado==="pendiente").map(u=><div key={u.id} className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl p-3 mb-2">
                 <div><p className="font-semibold text-sm">{u.nombre}</p><p className="text-xs text-slate-500">@{u.usuario} {u.telefono?`• ${u.telefono}`:""}</p></div>
                 <button onClick={()=>setEditUser(u)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium">Revisar</button></div>)}</div>}
-            {usuarios.filter(u=>u.estado!=="pendiente").map(u=><div key={u.id} className="flex items-center justify-between bg-white border rounded-xl p-3 mb-2">
-              <div><p className="font-semibold text-sm">{u.nombre}</p><p className="text-xs text-slate-500">@{u.usuario} • {u.rol==="admin"?"Admin":listas.find(l=>l.id===u.lista_precio_id)?.nombre||""}</p></div>
+            {usuarios.filter(u=>u.estado!=="pendiente").map(u=>{const activo=u.activo!==false&&u.activo!=="false";return<div key={u.id} className={`flex items-center justify-between border rounded-xl p-3 mb-2 ${activo?"bg-white":"bg-red-50 border-red-200"}`}>
+              <div><p className="font-semibold text-sm flex items-center gap-1.5">{u.nombre} <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activo?"bg-emerald-100 text-emerald-700":"bg-red-100 text-red-600"}`}>{activo?"activo":"suspendido"}</span></p>
+                <p className="text-xs text-slate-500">@{u.usuario} • {u.rol==="admin"?"Admin":listas.find(l=>l.id===u.lista_precio_id)?.nombre||""}</p></div>
               <div className="flex gap-1"><button onClick={()=>setEditUser(u)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200"><Edit2 className="w-3.5 h-3.5"/></button>
-                {u.rol!=="admin"&&<button onClick={async(e)=>{e.stopPropagation();if(!confirm(`¿Eliminar ${u.nombre}?`))return;try{await API.deleteUsuario(u.id);setUsuarios(prev=>prev.filter(x=>x.id!==u.id));showToast("Eliminado");setTimeout(()=>refreshAdmin(),500);}catch(e){showToast("Error: "+e.message);}}}
-                  className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-500"><Trash2 className="w-3.5 h-3.5"/></button>}</div></div>)}
-            {clientRanking.length>0&&<div className="mt-6"><h4 className="text-sm font-bold text-slate-700 mb-2"><TrendingUp className="w-4 h-4 inline mr-1"/>Ranking</h4>
+                {u.rol!=="admin"&&<button onClick={async(ev)=>{ev.stopPropagation();if(!confirm(`¿Eliminar ${u.nombre}?`))return;try{await API.deleteUsuario(u.id);setUsuarios(prev=>prev.filter(x=>x.id!==u.id));showToast("Eliminado");setTimeout(()=>refreshAdmin(),500);}catch(err){showToast("Error: "+err.message);}}}
+                  className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-500"><Trash2 className="w-3.5 h-3.5"/></button>}</div></div>})}            {clientRanking.length>0&&<div className="mt-6"><h4 className="text-sm font-bold text-slate-700 mb-2"><TrendingUp className="w-4 h-4 inline mr-1"/>Ranking</h4>
               {clientRanking.slice(0,10).map((c,i)=><div key={c.nombre} className="flex items-center justify-between bg-white border rounded-lg p-2 mb-1">
                 <span className="text-sm"><span className="font-bold text-slate-400 mr-2">#{i+1}</span>{c.nombre}</span>
                 <span className="text-sm font-bold text-blue-600">{fmt(c.total)} <span className="text-xs text-slate-400 font-normal">({c.pedidos})</span></span></div>)}</div>}
