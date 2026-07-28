@@ -128,7 +128,7 @@ function UserModal({u,isNew,onClose}){
     showToast(isNew?"Creado":"Actualizado");onClose();await refreshAdmin();
   }catch(e){showToast("Error: "+e.message);}setSv(false);};
   const aprobar=async lid=>{setSv(true);try{await API.aprobarUsuario(u.id,lid);showToast("Aprobado");
-    if(u.telefono){const msg=`Hola ${u.nombre}, tu cuenta en ${document.title||"el catálogo"} ya está activa. Tu usuario es: *${u.usuario}*`;window.open(`https://wa.me/54${u.telefono.replace(/\D/g,"")}?text=${encodeURIComponent(msg)}`,"_blank");}
+    if(u.telefono){const msg=`Hola ${u.nombre}, tu cuenta en ${document.title||"el catálogo"} ya está activa. Tu usuario es: *${u.usuario}*`;openWA(`54${u.telefono.replace(/\D/g,"")}`,msg);}
     onClose();await refreshAdmin();}catch(e){showToast("Error: "+e.message);}setSv(false);};
   const rechazar=async()=>{setSv(true);try{await API.rechazarUsuario(u.id);showToast("Rechazado");onClose();await refreshAdmin();}catch(e){showToast("Error: "+e.message);}setSv(false);};
   return(<div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={e=>e.target===e.currentTarget&&onClose()}>
@@ -251,6 +251,20 @@ function OrderDetailModal({order,onClose,onUpdate,onPrint,onClone}){
         <div className="flex gap-2">
           {["A4","80mm","50mm","100mm"].map(f=><button key={f} onClick={()=>onPrint(o,f)} className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-medium flex items-center justify-center gap-1"><Printer className="w-3 h-3"/>{f}</button>)}</div></>}
       </div></div></div>);
+}
+
+/* ── Price Adjustment Panel (stable, local state) ── */
+function PriceAdjustPanel(){
+  const{categorias,showToast,loadProductos}=useContext(Ctx);
+  const[pct,setPct]=useState("");const[cat,setCat]=useState("");const[busy,setBusy]=useState(false);
+  const apply=async()=>{if(!pct)return;setBusy(true);try{await API.ajustarPrecios(parseFloat(pct),cat||null);showToast("Precios ajustados");await loadProductos(1,"","");}catch(e){showToast("Error: "+e.message);}setBusy(false);};
+  const reset=async()=>{setBusy(true);try{await API.resetPrecios();showToast("Precios reseteados al original");await loadProductos(1,"","");}catch(e){showToast("Error: "+e.message);}setBusy(false);};
+  return(<div className="bg-white border rounded-xl p-4 space-y-3"><h4 className="font-semibold text-sm flex items-center gap-2"><Percent className="w-4 h-4"/>Ajustar precios base</h4>
+    <div className="flex gap-2"><input type="number" placeholder="% (ej: 10, -5)" className="flex-1 px-3 py-2 border rounded-xl text-sm" value={pct} onChange={e=>setPct(e.target.value)}/>
+      <select className="px-3 py-2 border rounded-xl text-sm" value={cat} onChange={e=>setCat(e.target.value)}>
+        <option value="">Todas las categorías</option>{categorias.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
+    <div className="flex gap-2"><button disabled={busy||!pct} onClick={apply} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium disabled:opacity-50">Aplicar {pct?`${pct}%`:""}</button>
+      <button disabled={busy} onClick={reset} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-sm font-medium disabled:opacity-50">Resetear precios</button></div></div>);
 }
 
 /* ── Config Panel (local state) ── */
@@ -387,15 +401,15 @@ export default function App(){
   const doLogin=async()=>{setLoginError("");try{const u=await API.login(loginUser.toLowerCase().trim(),loginPass);setUser(u);setLoginUser("");setLoginPass("");setView("catalog");}catch(e){setLoginError(e.pendiente?"Pendiente de aprobación.":(e.message||"Error"));}};
   const doRegister=async()=>{setRegError("");if(!regForm.nombre||!regForm.apellido||!regForm.usuario||!regForm.password||!regForm.telefono||!regForm.email){setRegError("Todos los campos son obligatorios");return;}
     try{const r=await API.register({...regForm,nombre:`${regForm.nombre} ${regForm.apellido}`});setRegMsg(r.mensaje||"Enviado. El admin revisará tu cuenta.");setAuthMode("pendiente");
-      const adminWa=config.whatsapp||"";if(adminWa){window.open(`https://wa.me/${adminWa}?text=${encodeURIComponent(`Hola, me registré en el catálogo:\nNombre: ${regForm.nombre} ${regForm.apellido}\nUsuario: ${regForm.usuario}\nTel: ${regForm.telefono}\nQuedo a la espera de aprobación`)}`,"_blank");}
+      const adminWa=config.whatsapp||"";if(adminWa){openWA(adminWa,`Hola, me registré en el catálogo:\nNombre: ${regForm.nombre} ${regForm.apellido}\nUsuario: ${regForm.usuario}\nTel: ${regForm.telefono}\nQuedo a la espera de aprobación`);}
     }catch(e){setRegError(e.message||"Error");}};
   const doLogout=()=>{API.logout();setUser(null);setVitrina(false);setCart([]);setView("catalog");setDataReady(false);setProductos([]);};
 
   const placeOrder=async()=>{if(!cartMeetsMin)return;setLoading(true);try{
-    const items=cart.map(i=>({producto_id:i.id,categoria:i.categoria,modelo:i.modelo,nombre_producto:`${i.categoria} - ${i.modelo}`,cantidad:i.qty,precio_unitario:getPrice(i.precio_base,userLista,pfMap,i.id),precio_base:i.precio_base}));
+    const items=cart.map(i=>{const pu=getPrice(i.precio_base,userLista,pfMap,i.id);return{producto_id:i.id,categoria:i.categoria,modelo:i.modelo,nombre_producto:`${i.categoria} - ${i.modelo}`,nombre:i.modelo,cantidad:i.qty,precio_unitario:pu,precio_base:i.precio_base,subtotal:pu*i.qty};});
     const res=await API.createPedido({items,total:cartTotal,tipo_entrega:checkoutType,direccion:checkoutAddr,notas:checkoutNotes,estado_pago:"pendiente"});
     const ordId=res?.id||res?.pedido?.id||"";const ordNum=ordId?`#${String(ordId).padStart(4,"0")}`:"";
-    if(config.whatsapp){const msg=`Hola soy *${user?.nombre||"cliente"}*\nPedido ${ordNum}\nTotal: *${fmt(cartTotal)}* (${cartCount} items)\nEntrega: ${checkoutType==="retiro"?"Retiro en local":"Envío"}`;window.open(`https://wa.me/${config.whatsapp}?text=${encodeURIComponent(msg)}`,"_blank");}
+    if(config.whatsapp){const msg=`Hola soy *${user?.nombre||"cliente"}*\nPedido ${ordNum}\nTotal: *${fmt(cartTotal)}* (${cartCount} items)\nEntrega: ${checkoutType==="retiro"?"Retiro en local":"Envío"}`;openWA(config.whatsapp,msg);}
     setCart([]);setCheckout(false);setShowCart(false);setCheckoutAddr("");setCheckoutNotes("");showToast("¡Pedido realizado!");
     const ords=await API.getPedidos().catch(()=>[]);setPedidos(Array.isArray(ords)?ords:[]);await loadProductos(page,searchDebounced,catFilter);
   }catch(e){showToast("Error: "+e.message);}setLoading(false);};
@@ -427,8 +441,11 @@ export default function App(){
 
   const clientRanking=useMemo(()=>{const m={};pedidos.filter(o=>o.estado!=="cancelado").forEach(o=>{const k=o.usuario_nombre||"?";if(!m[k])m[k]={nombre:k,total:0,pedidos:0};m[k].total+=Number(o.total)||0;m[k].pedidos++;});return Object.values(m).sort((a,b)=>b.total-a.total);},[pedidos]);
 
+  // WhatsApp helper — anchor click works better on mobile than window.open
+  const openWA=(number,text)=>{const a=document.createElement("a");a.href=`https://wa.me/${number}?text=${encodeURIComponent(text)}`;a.target="_blank";a.rel="noopener noreferrer";document.body.appendChild(a);a.click();document.body.removeChild(a);};
+
   const ctxVal=useMemo(()=>({userLista,pfMap,cart,setCart,addToCart,isAdmin,setEditProduct,dolarBlue,showToast,listas,setListas,preciosFijos,setPreciosFijos,
-    loadProductos,page,searchDebounced,catFilter,categorias,setCategorias,refreshAdmin,config,setConfig,mantForm,setMantForm}),[userLista,pfMap,cart,addToCart,isAdmin,dolarBlue,listas,preciosFijos,page,searchDebounced,catFilter,categorias,config,mantForm]);
+    loadProductos,page,searchDebounced,catFilter,categorias,setCategorias,refreshAdmin,config,setConfig,mantForm,setMantForm,productos}),[userLista,pfMap,cart,addToCart,isAdmin,dolarBlue,listas,preciosFijos,page,searchDebounced,catFilter,categorias,config,mantForm,productos]);
 
   if(authLoading)return<div className="flex items-center justify-center h-screen bg-slate-50"><Loader2 className="w-10 h-10 text-blue-600 animate-spin"/></div>;
   if(mantenimiento?.activo&&!isAdmin)return<div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-4"><div className="text-center max-w-md"><Settings className="w-16 h-16 text-amber-400 animate-spin mx-auto mb-6" style={{animationDuration:"3s"}}/><h1 className="text-2xl font-bold text-white mb-3">En mantenimiento</h1><p className="text-blue-200">{mantenimiento.mensaje||"Volvemos pronto."}</p></div></div>;
@@ -545,6 +562,8 @@ export default function App(){
           {adminTab==="products"&&<div className="space-y-3">
             <div className="flex gap-2 flex-wrap"><button onClick={()=>setAddProdModal(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium flex items-center gap-1.5"><Plus className="w-4 h-4"/>Agregar</button>
               <button onClick={()=>setImportModal(true)} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium flex items-center gap-1.5"><Upload className="w-4 h-4"/>Excel</button></div>
+            {/* Price adjustment */}
+            <PriceAdjustPanel/>
             <div className="bg-white border rounded-xl overflow-hidden"><h4 className="font-semibold text-sm p-3 border-b">Categorías → Productos</h4>
               <div className="max-h-[50vh] overflow-y-auto">{categorias.map(cat=>{const prods=productos.filter(p=>p.categoria===cat);const isExp=expandedCat===cat;
                 return<div key={cat}><button onClick={()=>setExpandedCat(isExp?"":cat)} className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-50 border-b border-slate-50">
@@ -554,9 +573,15 @@ export default function App(){
                     <span className="truncate flex-1">{p.modelo}</span><span className="text-xs text-slate-400 mx-2">{fmt(p.precio_base)}</span>
                     <button onClick={()=>setEditProduct(p)} className="p-1 rounded bg-white hover:bg-slate-200"><Edit2 className="w-3 h-3"/></button></div>)}
                     {!prods.length&&<p className="px-4 py-2 text-xs text-slate-400">Sin productos</p>}</div>}</div>;})}</div></div>
-            <div className="bg-white border border-red-200 rounded-xl p-4"><h4 className="font-semibold text-sm text-red-600 flex items-center gap-2 mb-2"><AlertTriangle className="w-4 h-4"/>Peligro</h4>
-              <button onClick={async()=>{if(!confirm("¿Eliminar TODOS?"))return;try{await API.deleteAllProductos();showToast("Eliminados");await loadProductos(1,"","");setCategorias(await API.getCategorias().catch(()=>[]));}catch(e){showToast("Error: "+e.message);}}}
-                className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-sm font-medium">Borrar todos</button></div></div>}
+            <div className="bg-white border border-red-200 rounded-xl p-4 space-y-3"><h4 className="font-semibold text-sm text-red-600 flex items-center gap-2 mb-2"><AlertTriangle className="w-4 h-4"/>Peligro</h4>
+              <div className="flex gap-2 flex-wrap items-end">
+                <div className="flex-1"><label className="text-xs text-slate-500 mb-1 block">Borrar categoría</label>
+                  <div className="flex gap-1"><select id="delCatSel" className="flex-1 px-2 py-2 border rounded-xl text-sm"><option value="">— Elegir —</option>{categorias.map(c=><option key={c} value={c}>{c}</option>)}</select>
+                    <button onClick={async()=>{const sel=document.getElementById("delCatSel").value;if(!sel||!confirm(`¿Eliminar toda la categoría "${sel}"?`))return;try{await API.deleteCategoria(sel);showToast("Categoría eliminada");await loadProductos(1,"","");setCategorias(await API.getCategorias().catch(()=>[]));}catch(e){showToast("Error: "+e.message);}}}
+                      className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-sm font-medium">Borrar</button></div></div>
+                <button onClick={async()=>{if(!confirm("¿Eliminar TODOS los productos?"))return;try{await API.deleteAllProductos();showToast("Eliminados");await loadProductos(1,"","");setCategorias(await API.getCategorias().catch(()=>[]));}catch(e){showToast("Error: "+e.message);}}}
+                  className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-xl text-sm font-medium">Borrar TODOS</button>
+              </div></div></div>}
 
           {adminTab==="users"&&<div>
             <div className="flex gap-2 mb-3"><button onClick={()=>setNewUserModal(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium flex items-center gap-1.5"><UserPlus className="w-4 h-4"/>Nuevo</button>
