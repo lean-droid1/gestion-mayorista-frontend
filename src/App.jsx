@@ -1,6 +1,7 @@
 import React,{useState,useEffect,useMemo,useCallback,useRef,memo,createContext,useContext}from"react";
-import{Search,ShoppingCart,User,LogOut,Package,Settings,Eye,EyeOff,Edit2,Trash2,Plus,Minus,Phone,Truck,Store,Users,DollarSign,AlertTriangle,Check,X,Menu,Filter,ClipboardList,Save,ChevronDown,ChevronRight,RefreshCw,UserPlus,Clock,Shield,BarChart3,Loader2,ArrowLeft,Percent,Upload,Printer,Download,Share2,TrendingUp,Mail,MapPin,FileText,Zap}from"lucide-react";
+import{Search,ShoppingCart,User,LogOut,Package,Settings,Eye,EyeOff,Edit2,Trash2,Plus,Minus,Phone,Truck,Store,Users,DollarSign,AlertTriangle,Check,X,Menu,Filter,ClipboardList,Save,ChevronDown,ChevronRight,RefreshCw,UserPlus,Clock,Shield,BarChart3,Loader2,ArrowLeft,Percent,Upload,Printer,Download,Share2,TrendingUp,Mail,MapPin,FileText,Zap,CreditCard}from"lucide-react";
 import*as XLSX from"xlsx";
+import QRCode from"qrcode";
 import*as API from"./api";
 
 const BRAND_KEYS=["SAMSUNG","MOTOROLA","XIAOMI","HUAWEI","IPHONE","LG","NOKIA","SONY","TCL","ZTE","PS4","PS5","PS3"];
@@ -240,7 +241,8 @@ function OrderDetailModal({order,onClose,onUpdate,onPrint,onClone}){
         </div>
         <div className="flex justify-between items-center"><p className="text-xl font-bold text-blue-600">{editing?fmt(editTotal):fmt(o.total)}</p>
           <div className="flex items-center gap-2"><StatusBadge status={o.estado}/>
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${o.estado_pago==="pagado"?"bg-emerald-100 text-emerald-700":"bg-red-100 text-red-600"}`}>{o.estado_pago==="pagado"?"💰 Pagado":"⏳ Impago"}</span></div></div>
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${o.estado_pago==="pagado"?"bg-emerald-100 text-emerald-700":"bg-red-100 text-red-600"}`}>{o.estado_pago==="pagado"?"💰 Pagado":"⏳ Impago"}</span>
+            {o.metodo_pago&&<span className="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">💳 {o.metodo_pago}</span>}</div></div>
         <div className="flex gap-2"><button onClick={()=>onUpdate(o.id,{estado_pago:o.estado_pago==="pagado"?"pendiente":"pagado"})}
           className={`flex-1 py-2 rounded-xl text-sm font-medium border-2 ${o.estado_pago==="pagado"?"border-emerald-500 bg-emerald-50 text-emerald-700":"border-red-300 bg-red-50 text-red-600"}`}>
           {o.estado_pago==="pagado"?"✅ Pagado — marcar impago":"❌ Impago — marcar pagado"}</button></div>
@@ -278,7 +280,7 @@ function OrderDetailModal({order,onClose,onUpdate,onPrint,onClone}){
             :<button onClick={()=>onUpdate(o.id,{estado:"pendiente"})} className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium">↩ Reactivar</button>}
             <button onClick={()=>onClone(o)} className="px-3 py-1.5 rounded-lg bg-blue-50 text-xs font-medium text-blue-600">Repetir</button></div>
         <div className="flex gap-2">
-          {["A4","80mm","50mm","100mm"].map(f=><button key={f} onClick={()=>onPrint(o,f)} className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-medium flex items-center justify-center gap-1"><Printer className="w-3 h-3"/>{f}</button>)}</div></>}
+          {["A4","80mm","50mm","100mm"].map(f=><button key={f} onClick={()=>onPrint({...o,items},f)} className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-medium flex items-center justify-center gap-1"><Printer className="w-3 h-3"/>{f}</button>)}</div></>}
       </div></div></div>);
 }
 
@@ -319,6 +321,15 @@ function ConfigPanel(){
       <textarea className="w-full px-3 py-2.5 border rounded-xl text-sm" rows={3} value={c.info_pagos||""} onChange={e=>setC({...c,info_pagos:e.target.value})}/></div>
     <div><label className="text-sm font-medium text-slate-700 mb-1 block">Info de envíos (para clientes)</label>
       <textarea className="w-full px-3 py-2.5 border rounded-xl text-sm" rows={3} value={c.info_envios||""} onChange={e=>setC({...c,info_envios:e.target.value})}/></div>
+    <div className="bg-white border rounded-xl p-4 space-y-3"><h4 className="font-semibold text-sm flex items-center gap-2"><CreditCard className="w-4 h-4"/>Métodos de pago</h4>
+      <p className="text-xs text-slate-400">Los clientes eligen al finalizar su compra. Uno por línea.</p>
+      {(()=>{const metodos=(c.metodos_pago||"").split("\n").filter(m=>m.trim());
+        return<><div className="space-y-1.5">{metodos.map((m,i)=><div key={i} className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
+          <span className="flex-1 text-sm">{m}</span><button onClick={()=>{const upd=metodos.filter((_,j)=>j!==i).join("\n");setC({...c,metodos_pago:upd});}} className="p-1 rounded bg-red-50 text-red-500 hover:bg-red-100"><Trash2 className="w-3 h-3"/></button></div>)}</div>
+          <div className="flex gap-2"><input id="newMetodo" className="flex-1 px-3 py-2 border rounded-xl text-sm" placeholder="Ej: Efectivo, Transferencia, USDT..."
+            onKeyDown={e=>{if(e.key==="Enter"&&e.target.value.trim()){const upd=metodos.length?[...metodos,e.target.value.trim()].join("\n"):e.target.value.trim();setC({...c,metodos_pago:upd});e.target.value="";}}}/>
+            <button onClick={()=>{const inp=document.getElementById("newMetodo");if(inp?.value.trim()){const upd=metodos.length?[...metodos,inp.value.trim()].join("\n"):inp.value.trim();setC({...c,metodos_pago:upd});inp.value="";}}}
+              className="px-3 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium"><Plus className="w-4 h-4"/></button></div></>;})()}</div>
     <div className="bg-white border rounded-xl p-4 space-y-3"><h4 className="font-semibold text-sm flex items-center gap-2"><Shield className="w-4 h-4"/>Mantenimiento</h4>
       <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={m.activo} onChange={e=>setM({...m,activo:e.target.checked})} className="w-4 h-4 rounded"/>Activar</label>
       <input className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Mensaje" value={m.mensaje} onChange={e=>setM({...m,mensaje:e.target.value})}/>
@@ -372,7 +383,7 @@ export default function App(){
   const[catFilter,setCatFilter]=useState("");const[brandFilter,setBrandFilter]=useState("");const[stockFilter,setStockFilter]=useState(false);
   const[page,setPage]=useState(1);const[pageSize,setPageSize]=useState(60);const[showCats,setShowCats]=useState(false);
   const[showCart,setShowCart]=useState(false);const[cart,setCart]=useState([]);const[checkout,setCheckout]=useState(false);
-  const[checkoutType,setCheckoutType]=useState("retiro");const[checkoutAddr,setCheckoutAddr]=useState("");const[checkoutNotes,setCheckoutNotes]=useState("");
+  const[checkoutType,setCheckoutType]=useState("retiro");const[checkoutAddr,setCheckoutAddr]=useState("");const[checkoutNotes,setCheckoutNotes]=useState("");const[checkoutPago,setCheckoutPago]=useState("");
   const[editProduct,setEditProduct]=useState(null);const[addProdModal,setAddProdModal]=useState(false);const[importModal,setImportModal]=useState(false);
   const[editUser,setEditUser]=useState(null);const[newUserModal,setNewUserModal]=useState(false);const[editTier,setEditTier]=useState(null);
   const[viewOrder,setViewOrder]=useState(null);
@@ -399,7 +410,9 @@ export default function App(){
     if(API.isLoggedIn()){try{setUser(await API.getMe());}catch{API.logout();}}setAuthLoading(false);})();},[]);
   useEffect(()=>{if(authLoading)return;if(mantenimiento?.activo&&!isAdmin)return;loadCoreData();},[authLoading,user,vitrina]);
   useEffect(()=>{fetch("https://dolarapi.com/v1/dolares/blue").then(r=>r.json()).then(d=>setDolarBlue(d.venta)).catch(()=>{});},[]);
-  useEffect(()=>{const p=new URLSearchParams(window.location.search);const cd=p.get("cart");if(cd){try{setCart(JSON.parse(atob(cd)));window.history.replaceState({},"",window.location.pathname);}catch{}};},[]);
+  useEffect(()=>{const p=new URLSearchParams(window.location.search);const cd=p.get("cart");if(cd){try{setCart(JSON.parse(atob(cd)));window.history.replaceState({},"",window.location.pathname);}catch{}}
+    const pedidoId=p.get("pedido");if(pedidoId&&user){(async()=>{try{const full=await API.getPedido(pedidoId);setViewOrder(full);setView(isAdmin?"admin":"orders");window.history.replaceState({},"",window.location.pathname);}catch(e){console.error(e);}})();}
+  },[user]);
 
   const loadCoreData=async()=>{try{const[cats,listasD,cfgD]=await Promise.all([API.getCategorias().catch(()=>[]),user?API.getListas().catch(()=>[]):Promise.resolve([]),user?API.getConfig().catch(()=>({})):Promise.resolve({})]);
     setCategorias(Array.isArray(cats)?cats:[]);if(listasD.length)setListas(listasD.map((l,i)=>({...l,multiplicador:l.multiplicador||(1+(Number(l.porcentaje)||0)/100),modo:l.modo||"porcentaje",color:l.color||LISTA_COLORS[i%LISTA_COLORS.length]})));
@@ -436,28 +449,40 @@ export default function App(){
 
   const placeOrder=async()=>{if(!cartMeetsMin)return;setLoading(true);try{
     const items=cart.map(i=>{const pu=getPrice(i.precio_base,userLista,pfMap,i.id);return{producto_id:i.id,categoria:i.categoria,modelo:i.modelo,nombre_producto:`${i.categoria} - ${i.modelo}`,nombre:i.modelo,cantidad:i.qty,precio_unitario:pu,precio_base:i.precio_base,subtotal:pu*i.qty};});
-    const res=await API.createPedido({items,total:cartTotal,tipo_entrega:checkoutType,direccion:checkoutAddr,notas:checkoutNotes,estado_pago:"pendiente"});
+    const res=await API.createPedido({items,total:cartTotal,tipo_entrega:checkoutType,direccion:checkoutAddr,notas:checkoutNotes,estado_pago:"pendiente",metodo_pago:checkoutPago});
     const ordId=res?.id||res?.pedido?.id||"";const ordNum=ordId?`#${String(ordId).padStart(4,"0")}`:"";
-    if(config.whatsapp){const msg=`Hola soy *${user?.nombre||"cliente"}*\nPedido ${ordNum}\nTotal: *${fmt(cartTotal)}* (${cartCount} items)\nEntrega: ${checkoutType==="retiro"?"Retiro en local":"Envío"}`;openWA(config.whatsapp,msg);}
-    setCart([]);setCheckout(false);setShowCart(false);setCheckoutAddr("");setCheckoutNotes("");showToast("¡Pedido realizado!");
+    if(config.whatsapp){const msg=`Hola soy *${user?.nombre||"cliente"}*\nPedido ${ordNum}\nTotal: *${fmt(cartTotal)}* (${cartCount} items)\nEntrega: ${checkoutType==="retiro"?"Retiro en local":"Envío"}${checkoutPago?`\nPago: ${checkoutPago}`:""}`;openWA(config.whatsapp,msg);}
+    setCart([]);setCheckout(false);setShowCart(false);setCheckoutAddr("");setCheckoutNotes("");setCheckoutPago("");showToast("¡Pedido realizado!");
     const ords=await API.getPedidos().catch(()=>[]);setPedidos(Array.isArray(ords)?ords:[]);await loadProductos(page,searchDebounced,catFilter);
   }catch(e){showToast("Error: "+e.message);}setLoading(false);};
 
   const shareCart=()=>{navigator.clipboard.writeText(`${window.location.origin}?cart=${btoa(JSON.stringify(cart))}`).then(()=>showToast("Link copiado")).catch(()=>{});};
   const cloneOrder=o=>{setCart((o.items||[]).map(i=>({id:i.producto_id||i.id,categoria:i.categoria,modelo:i.modelo,precio_base:i.precio_base||i.precio_unitario,qty:i.cantidad||i.qty})));showToast("Cargado al carrito");setView("catalog");setViewOrder(null);};
 
-  const printRemito=(order,format="A4")=>{const biz=config.nombre_negocio||"Mayorista";const logo=config.logo||"";const isS=format!=="A4";
-    const items=(order.items||[]).map(i=>`<tr><td style="padding:3px 4px;border-bottom:1px solid #eee;font-size:${isS?"9px":"12px"}">${i.categoria} - ${i.modelo}</td><td style="text-align:center;border-bottom:1px solid #eee">${i.cantidad||i.qty}</td><td style="text-align:right;border-bottom:1px solid #eee">${fmt((Number(i.precio_unitario)||0)*(i.cantidad||i.qty))}</td></tr>`).join("");
+  const printRemito=async(order,format="A4")=>{const biz=config.nombre_negocio||"Mayorista";const logo=config.logo||"";const isS=format!=="A4";
+    const itemName=i=>i.nombre_producto||(i.categoria&&i.modelo?`${i.categoria} - ${i.modelo}`:i.modelo||"Producto");
+    const itemsHtml=(order.items||[]).map(i=>{const qty=i.cantidad||i.qty||0;const pu=Number(i.precio_unitario)||0;
+      return`<tr><td style="padding:4px;border-bottom:1px solid #ddd;font-size:${isS?"9px":"12px"}">${itemName(i)}</td><td style="text-align:center;border-bottom:1px solid #ddd;font-size:${isS?"9px":"12px"}">${qty}</td><td style="text-align:right;border-bottom:1px solid #ddd;font-size:${isS?"9px":"12px"}">${fmt(pu)}</td><td style="text-align:right;border-bottom:1px solid #ddd;font-size:${isS?"9px":"12px"}">${fmt(pu*qty)}</td></tr>`;}).join("");
     const orderNum=typeof order.id==="number"?`#${String(order.id).padStart(4,"0")}`:`#${order.id}`;
+    const orderId=typeof order.id==="number"?order.id:order.id;
+    const qrUrl=`${window.location.origin}?pedido=${orderId}`;
+    let qrImg="";try{qrImg=await QRCode.toDataURL(qrUrl,{width:200,margin:1,color:{dark:"#000",light:"#fff"}});}catch(e){console.error("QR error",e);}
+    const qrSize=isS?"25mm":"30mm";
+    const pagado=order.estado_pago==="pagado";const metPago=order.metodo_pago||"";
     const w=window.open("","_blank");w.document.write(`<!DOCTYPE html><html><head><title>Remito ${orderNum}</title><style>@page{size:${format==="A4"?"A4 portrait":format+" auto"};margin:${isS?"3mm":"15mm"}}body{font-family:Arial,sans-serif;font-size:${isS?"10px":"13px"};margin:0;padding:${isS?"4px":"20px"};max-width:${isS?format:"auto"}}table{width:100%;border-collapse:collapse}th{text-align:left;border-bottom:2px solid #333;padding:4px;font-size:${isS?"9px":"12px"}}</style></head><body>
-    ${logo?`<img src="${logo}" style="max-height:${isS?"25px":"50px"};margin-bottom:8px">`:""}
-    <h2 style="margin:0;font-size:${isS?"13px":"20px"}">${biz}</h2>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">
+      <div style="flex:1">${logo?`<img src="${logo}" style="max-height:${isS?"25px":"50px"};margin-bottom:4px"><br>`:""}<span style="font-weight:bold;font-size:${isS?"13px":"20px"}">${biz}</span></div>
+      ${qrImg?`<img src="${qrImg}" style="width:${qrSize};height:${qrSize}">`:""}
+    </div>
     <p style="margin:4px 0;color:#666;font-size:${isS?"9px":"12px"}">Pedido ${orderNum} — ${new Date(order.fecha||order.created_at).toLocaleString("es-AR")}</p>
-    <p style="margin:2px 0;font-size:${isS?"9px":"12px"}">${order.usuario_nombre||""} — ${order.tipo_entrega==="retiro"?"Retiro":"Envío"} ${order.direccion||""}</p><hr>
-    <table><thead><tr><th>Producto</th><th style="text-align:center">Cant</th><th style="text-align:right">Subtotal</th></tr></thead><tbody>${items}</tbody></table>
-    <p style="text-align:right;font-weight:bold;font-size:${isS?"14px":"20px"};margin-top:12px">TOTAL: ${fmt(order.total)}</p>
+    <p style="margin:2px 0;font-size:${isS?"9px":"12px"}"><b>${order.usuario_nombre||order.cliente_nombre||""}</b> ${order.usuario_telefono||order.cliente_telefono?`— Tel: ${order.usuario_telefono||order.cliente_telefono}`:""}</p>
+    <p style="margin:2px 0;font-size:${isS?"9px":"12px"}">${order.tipo_entrega==="retiro"?"📦 Retiro":"🚚 Envío"} ${order.direccion_envio||""}</p>
+    <div style="display:flex;gap:8px;margin:6px 0"><span style="padding:3px 8px;border-radius:4px;font-size:${isS?"9px":"11px"};font-weight:bold;${pagado?"background:#d1fae5;color:#065f46":"background:#fee2e2;color:#991b1b"}">${pagado?"✅ PAGADO":"⏳ IMPAGO"}</span>${metPago?`<span style="padding:3px 8px;border-radius:4px;font-size:${isS?"9px":"11px"};background:#e0e7ff;color:#3730a3">💳 ${metPago}</span>`:""}</div>
+    <hr style="border:none;border-top:1px solid #999;margin:6px 0">
+    <table><thead><tr><th>Producto</th><th style="text-align:center">Cant</th><th style="text-align:right">P.Unit</th><th style="text-align:right">Subtotal</th></tr></thead><tbody>${itemsHtml}</tbody></table>
+    <p style="text-align:right;font-weight:bold;font-size:${isS?"14px":"22px"};margin-top:12px;border-top:2px solid #333;padding-top:8px">TOTAL: ${fmt(order.total)}</p>
     ${order.notas?`<p style="color:#666;font-size:${isS?"8px":"11px"};margin-top:8px">Notas: ${order.notas}</p>`:""}
-    </body></html>`);w.document.close();setTimeout(()=>w.print(),400);};
+    </body></html>`);w.document.close();setTimeout(()=>w.print(),500);};
 
   const exportOrders=()=>{const rows=[];pedidos.forEach(o=>(o.items||[]).forEach(i=>{rows.push({Pedido:o.id,Fecha:new Date(o.fecha||o.created_at).toLocaleDateString("es-AR"),Cliente:o.usuario_nombre,Producto:i.categoria+" - "+i.modelo,Cantidad:i.cantidad||i.qty,Precio:i.precio_unitario,Subtotal:(Number(i.precio_unitario)||0)*(i.cantidad||i.qty),Total:o.total,Estado:o.estado});}));
     const ws=XLSX.utils.json_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Pedidos");XLSX.writeFile(wb,"pedidos.xlsx");showToast("Excel descargado");};
@@ -718,6 +743,10 @@ export default function App(){
           <div className="flex gap-2"><button onClick={()=>setCheckoutType("retiro")} className={`flex-1 py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 border-2 ${checkoutType==="retiro"?"border-blue-600 bg-blue-50 text-blue-700":"border-slate-200"}`}><Store className="w-4 h-4"/>Retiro</button>
             <button onClick={()=>setCheckoutType("envio")} className={`flex-1 py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 border-2 ${checkoutType==="envio"?"border-blue-600 bg-blue-50 text-blue-700":"border-slate-200"}`}><Truck className="w-4 h-4"/>Envío</button></div>
           {checkoutType==="envio"&&<textarea className="w-full px-3 py-2.5 border rounded-xl text-sm" rows={2} placeholder="Dirección *" value={checkoutAddr} onChange={e=>setCheckoutAddr(e.target.value)}/>}
+          {(()=>{const metodos=(config.metodos_pago||"").split("\n").filter(m=>m.trim());if(!metodos.length)return null;
+            return<div><label className="text-sm font-medium text-slate-700 mb-1.5 block">💳 Método de pago</label>
+              <div className="flex flex-wrap gap-1.5">{metodos.map(m=><button key={m} onClick={()=>setCheckoutPago(checkoutPago===m?"":m)}
+                className={`px-3 py-2 rounded-xl text-sm font-medium border-2 ${checkoutPago===m?"border-blue-600 bg-blue-50 text-blue-700":"border-slate-200 text-slate-600"}`}>{m}</button>)}</div></div>;})()}
           <textarea className="w-full px-3 py-2.5 border rounded-xl text-sm" rows={2} placeholder="Notas (opcional)" value={checkoutNotes} onChange={e=>setCheckoutNotes(e.target.value)}/>
           <div className="bg-slate-50 rounded-xl p-3"><div className="flex justify-between text-lg"><span className="font-bold">Total</span><span className="font-bold text-blue-600">{fmt(cartTotal)}</span></div>
             {dolarBlue&&<p className="text-xs text-slate-400 text-right">{fmtARS(cartTotal*dolarBlue)}</p>}
