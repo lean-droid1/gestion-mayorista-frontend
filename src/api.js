@@ -121,7 +121,7 @@ export function isLoggedIn() {
 // CONFIGURACIÓN
 // ══════════════════════════════════════
 export async function getConfig() {
-  return api('/api/config');
+  return apiPublic('/api/config');
 }
 
 export async function updateConfig(config) {
@@ -132,7 +132,7 @@ export async function updateConfig(config) {
 // LISTAS DE PRECIO
 // ══════════════════════════════════════
 export async function getListas() {
-  return api('/api/listas');
+  return apiPublic('/api/listas');
 }
 
 export async function updateListas(listas) {

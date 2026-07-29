@@ -33,7 +33,7 @@ const ProductCard=memo(function ProductCard({p}){
       <p className="text-[10px] font-medium uppercase tracking-wide truncate" style={{color:cc}}>{p.categoria}</p>
       <p className="text-sm font-bold text-slate-800 mt-0.5 truncate" title={p.modelo}>{p.modelo}</p>
       {p.compatibilidad&&<p className="text-[9px] text-slate-400 truncate" title={p.compatibilidad}>Compatible: {p.compatibilidad}</p>}
-      {isVitrina?<div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg p-2 text-center"><p className="text-xs font-medium text-amber-700">¿Querés saber el precio?</p><p className="text-[10px] text-amber-600 mt-0.5">Ingresá o creá tu cuenta</p></div>
+      {isVitrina?<button onClick={()=>{if(window.__exitVitrina)window.__exitVitrina();}} className="mt-2 w-full bg-amber-50 border border-amber-200 rounded-lg p-2 text-center hover:bg-amber-100 transition-colors cursor-pointer"><p className="text-xs font-medium text-amber-700">¿Querés saber el precio?</p><p className="text-[10px] text-amber-600 mt-0.5">Ingresá o creá tu cuenta →</p></button>
       :<><div className="flex items-center justify-between mt-2">
         <div><p className="text-lg font-bold" style={{color:userLista.color}}>{fmt(price)}</p>{dolarBlue&&<p className="text-[10px] text-slate-400">{fmtARS(price*dolarBlue)}</p>}</div>
         {isAdmin&&<button onClick={()=>setEditProduct(p)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500"><Edit2 className="w-3.5 h-3.5"/></button>}</div>
@@ -128,8 +128,8 @@ function UserModal({u,isNew,onClose}){
   const{listas,showToast,refreshAdmin}=useContext(Ctx);
   const isPending=u?.estado==="pendiente";
   const[f,setF]=useState(isNew
-    ?{nombre:"",usuario:"",password:"",telefono:"",email:"",direccion:"",rol:"cliente",lista_precio_id:listas[0]?.id||""}
-    :{nombre:u?.nombre||"",usuario:u?.usuario||"",password:"",telefono:u?.telefono||"",email:u?.email||"",direccion:u?.direccion||"",rol:u?.rol||"cliente",lista_precio_id:u?.lista_precio_id||listas[0]?.id||"",activo:u?.activo??true});
+    ?{nombre:"",usuario:"",password:"",telefono:"",email:"",direccion:"",rol:"cliente",lista_precio_id:listas[0]?.id||"",nombre_fantasia:""}
+    :{nombre:u?.nombre||"",usuario:u?.usuario||"",password:"",telefono:u?.telefono||"",email:u?.email||"",direccion:u?.direccion||"",rol:u?.rol||"cliente",lista_precio_id:u?.lista_precio_id||listas[0]?.id||"",activo:u?.activo??true,nombre_fantasia:u?.nombre_fantasia||""});
   const[sv,setSv]=useState(false);
   const save=async()=>{if(!f.nombre||!f.usuario){showToast("Nombre y usuario obligatorios");return;}setSv(true);try{
     const datos=isNew?{...f,activo:true}:{...u,...f};delete datos.id;delete datos.created_at;delete datos.updated_at;delete datos.estado;if(!datos.password)delete datos.password;
@@ -144,7 +144,7 @@ function UserModal({u,isNew,onClose}){
     <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl p-4 space-y-3 max-h-[90vh] overflow-y-auto">
       <div className="flex justify-between items-center"><h3 className="font-bold">{isNew?"Nuevo usuario":isPending?"Revisar usuario":"Editar usuario"}</h3><button onClick={onClose}><X className="w-5 h-5"/></button></div>
       {isPending&&<div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800"><Clock className="w-4 h-4 inline mr-1"/>Pendiente de aprobación</div>}
-      {!isNew&&<div className="bg-slate-50 rounded-xl p-3"><p className="font-semibold">{u.nombre}</p><p className="text-sm text-slate-500">@{u.usuario} {u.telefono?`• ${u.telefono}`:""} {u.email?`• ${u.email}`:""}</p></div>}
+      {!isNew&&<div className="bg-slate-50 rounded-xl p-3"><p className="font-semibold">{u.nombre}{u.nombre_fantasia?<span className="text-sm text-blue-600 ml-1">({u.nombre_fantasia})</span>:""}</p><p className="text-sm text-slate-500">@{u.usuario} {u.telefono?`• ${u.telefono}`:""} {u.email?`• ${u.email}`:""}</p></div>}
       {/* Approve section for pending */}
       {isPending&&<div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2">
         <label className="text-sm font-semibold text-blue-800 block">✅ Aprobar con lista:</label>
@@ -159,6 +159,7 @@ function UserModal({u,isNew,onClose}){
         <input className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Teléfono / WhatsApp *" value={f.telefono} onChange={e=>setF({...f,telefono:e.target.value})}/>
         <input type="email" className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Email *" value={f.email} onChange={e=>setF({...f,email:e.target.value})}/>
         <input className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Dirección" value={f.direccion} onChange={e=>setF({...f,direccion:e.target.value})}/>
+        <input className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Nombre de fantasía (opcional)" value={f.nombre_fantasia} onChange={e=>setF({...f,nombre_fantasia:e.target.value})}/>
         <select className="w-full px-3 py-2.5 border rounded-xl text-sm" value={f.rol} onChange={e=>setF({...f,rol:e.target.value})}><option value="cliente">Cliente</option><option value="subadmin">Sub-Admin</option><option value="admin">Admin</option></select>
         {f.rol==="subadmin"&&<div className="bg-slate-50 rounded-xl p-3 space-y-1"><p className="text-xs font-semibold text-slate-600 mb-1">Permisos:</p>
           {[["productos","Productos"],["pedidos","Pedidos"],["usuarios","Usuarios"],["listas","Listas"],["config","Configuración"],["stats","Estadísticas"]].map(([k,label])=>{
@@ -204,6 +205,23 @@ function TierModal({tier,isNew,onClose}){
     </div></div>);
 }
 
+/* ── Client Assign Panel (with search) ── */
+function ClientAssignPanel({clientes,currentId,currentName,onAssign}){
+  const[q,setQ]=useState("");
+  const filtered=q.length<1?clientes:clientes.filter(u=>`${u.nombre} ${u.usuario} ${u.nombre_fantasia||""}`.toLowerCase().includes(q.toLowerCase()));
+  return<div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
+    <p className="text-xs font-semibold text-amber-800">📋 Presupuesto — Asignar a cliente:</p>
+    <div className="relative"><Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-amber-400"/>
+      <input className="w-full pl-8 pr-3 py-2 border border-amber-200 rounded-xl text-sm bg-white" placeholder="Buscar cliente..." value={q} onChange={e=>setQ(e.target.value)}/></div>
+    <div className="max-h-36 overflow-y-auto space-y-1">{currentId&&<button onClick={()=>{onAssign(null);setQ("");}} className="w-full text-left px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 hover:bg-red-100">✕ Quitar asignación</button>}
+      {filtered.map(u=><button key={u.id} onClick={()=>{onAssign(u.id);setQ("");}}
+        className={`w-full text-left px-3 py-1.5 rounded-lg text-xs hover:bg-amber-100 border ${currentId===u.id?"bg-amber-200 border-amber-400 font-semibold":"bg-white border-amber-100"}`}>
+        {u.nombre}{u.nombre_fantasia?` (${u.nombre_fantasia})`:""} <span className="text-amber-500">@{u.usuario}</span></button>)}
+      {filtered.length===0&&<p className="text-xs text-amber-400 text-center py-2">Sin resultados</p>}</div>
+    {currentName&&<p className="text-xs text-amber-700">Asignado a: <b>{currentName}</b></p>}
+  </div>;
+}
+
 /* ── Order Detail Modal (with editing) ── */
 function OrderDetailModal({order,onClose,onUpdate,onPrint,onClone}){
   const{userLista,pfMap,showToast,usuarios:allUsers,isAdmin}=useContext(Ctx);
@@ -241,12 +259,10 @@ function OrderDetailModal({order,onClose,onUpdate,onPrint,onClone}){
           <button onClick={onClose}><X className="w-5 h-5"/></button></div></div>
       <div className="p-4 space-y-3">
         {/* Presupuesto: assign to user */}
-        {o.tipo==="presupuesto"&&isAdmin&&<div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-2">
-          <p className="text-xs font-semibold text-amber-800">📋 Presupuesto — Asignar a cliente:</p>
-          <select className="w-full px-3 py-2 border rounded-xl text-sm" value={o.asignado_usuario_id||""} onChange={e=>{const uid=e.target.value?parseInt(e.target.value):null;onUpdate(o.id,{asignado_usuario_id:uid});}}>
-            <option value="">— Sin asignar —</option>{(allUsers||[]).filter(u=>u.rol!=="admin"&&u.estado!=="suspendido").map(u=><option key={u.id} value={u.id}>{u.nombre} (@{u.usuario})</option>)}</select>
-          {(o.asignado_nombre||o.asignado_usuario_id)&&<p className="text-xs text-amber-700">Asignado a: <b>{o.asignado_nombre||"—"}</b></p>}
-        </div>}
+        {o.tipo==="presupuesto"&&isAdmin&&(()=>{
+          const clientesFiltrados=(allUsers||[]).filter(u=>u.rol!=="admin"&&u.estado!=="suspendido");
+          return<ClientAssignPanel clientes={clientesFiltrados} currentId={o.asignado_usuario_id} currentName={o.asignado_nombre} onAssign={uid=>onUpdate(o.id,{asignado_usuario_id:uid})}/>;
+        })()}
         {/* Customer info + WhatsApp */}
         <div className="flex items-center justify-between bg-slate-50 rounded-xl p-3">
           <div className="min-w-0 flex-1"><p className="font-semibold text-sm truncate">{o.usuario_nombre||o.cliente_nombre||"—"}</p>
@@ -365,12 +381,12 @@ function ConfigPanel(){
 function AccountPanel({user,userLista,config,doLogout}){
   const{showToast}=useContext(Ctx);
   const[editing,setEditing]=useState(false);
-  const[f,setF]=useState({nombre:user.nombre||"",usuario:user.usuario||"",telefono:user.telefono||"",email:user.email||"",direccion:user.direccion||""});
+  const[f,setF]=useState({nombre:user.nombre||"",usuario:user.usuario||"",telefono:user.telefono||"",email:user.email||"",direccion:user.direccion||"",nombre_fantasia:user.nombre_fantasia||""});
   const[pw,setPw]=useState("");const[sv,setSv]=useState(false);
   const saveProfile=async()=>{setSv(true);try{const d={...f};if(pw)d.password=pw;await API.updateMe(d);showToast("Datos actualizados — si cambiaste usuario o contraseña, reingresá");setEditing(false);setPw("");}catch(e){showToast("Error: "+e.message);}setSv(false);};
   return(<div className="p-4 max-w-md mx-auto"><div className="bg-white rounded-2xl border p-6">
     <div className="text-center"><div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3"><User className="w-8 h-8 text-blue-600"/></div>
-      <h3 className="font-bold text-lg">{user.nombre}</h3><p className="text-sm text-slate-500">@{user.usuario}</p>
+      <h3 className="font-bold text-lg">{user.nombre}</h3>{user.nombre_fantasia&&<p className="text-sm text-blue-500 font-medium">{user.nombre_fantasia}</p>}<p className="text-sm text-slate-500">@{user.usuario}</p>
       {userLista&&<div className="mt-2 inline-flex px-3 py-1 rounded-full text-sm font-medium" style={{backgroundColor:userLista.color+"15",color:userLista.color}}>{userLista.nombre}</div>}</div>
     {!editing?<div className="mt-4 space-y-2 text-left">
       {user.telefono&&<p className="text-sm text-slate-600 flex items-center gap-2"><Phone className="w-4 h-4 text-slate-400"/>{user.telefono}</p>}
@@ -383,6 +399,7 @@ function AccountPanel({user,userLista,config,doLogout}){
       <input className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Teléfono / WhatsApp" value={f.telefono} onChange={e=>setF({...f,telefono:e.target.value})}/>
       <input type="email" className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Email" value={f.email} onChange={e=>setF({...f,email:e.target.value})}/>
       <input className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Dirección" value={f.direccion} onChange={e=>setF({...f,direccion:e.target.value})}/>
+      <input className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Nombre de fantasía (opcional)" value={f.nombre_fantasia} onChange={e=>setF({...f,nombre_fantasia:e.target.value})}/>
       <input type="password" className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Nueva contraseña (vacío=no cambiar)" value={pw} onChange={e=>setPw(e.target.value)}/>
       <div className="flex gap-2"><button onClick={saveProfile} disabled={sv} className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-medium disabled:opacity-50">{sv?"...":"Guardar"}</button>
         <button onClick={()=>{setEditing(false);setPw("");}} className="py-2.5 px-4 bg-slate-100 rounded-xl text-sm">Cancelar</button></div></div>}
@@ -459,7 +476,7 @@ export default function App(){
   const[loading,setLoading]=useState(false);const[dataReady,setDataReady]=useState(false);const[presupuesto,setPresupuesto]=useState(false);
   const[authMode,setAuthMode]=useState("login");const[loginUser,setLoginUser]=useState("");const[loginPass,setLoginPass]=useState("");
   const[loginError,setLoginError]=useState("");const[showPass,setShowPass]=useState(false);
-  const[regForm,setRegForm]=useState({nombre:"",apellido:"",usuario:"",password:"",telefono:"",email:""});
+  const[regForm,setRegForm]=useState({nombre:"",apellido:"",usuario:"",password:"",telefono:"",email:"",nombre_fantasia:""});
   const[regError,setRegError]=useState("");const[regMsg,setRegMsg]=useState("");
   const[mantForm,setMantForm]=useState({activo:false,mensaje:"",countdown:""});
   const[expandedCat,setExpandedCat]=useState("");
@@ -476,17 +493,17 @@ export default function App(){
 
   useEffect(()=>{(async()=>{try{const m=await API.getMaintenanceStatus();if(m.activo){setMantenimiento(m);setAuthLoading(false);return;}}catch{}
     if(API.isLoggedIn()){try{setUser(await API.getMe());}catch{API.logout();}}setAuthLoading(false);})();},[]);
-  useEffect(()=>{if(authLoading)return;if(mantenimiento?.activo&&!isAdmin)return;loadCoreData();},[authLoading,user,vitrina]);
+  useEffect(()=>{if(authLoading)return;if(mantenimiento?.activo&&!isAdmin){loadCoreData();return;}loadCoreData();},[authLoading,user,vitrina]);
   useEffect(()=>{fetch("https://dolarapi.com/v1/dolares/blue").then(r=>r.json()).then(d=>setDolarBlue(d.venta)).catch(()=>{});},[]);
   useEffect(()=>{const p=new URLSearchParams(window.location.search);const cd=p.get("cart");if(cd){try{setCart(JSON.parse(atob(cd)));window.history.replaceState({},"",window.location.pathname);}catch{}}
     const pedidoId=p.get("pedido");if(pedidoId&&user){(async()=>{try{const full=await API.getPedido(pedidoId);setViewOrder(full);setView(isAdmin?"admin":"orders");window.history.replaceState({},"",window.location.pathname);}catch(e){console.error(e);}})();}
   },[user]);
 
-  const loadCoreData=async()=>{try{const[cats,listasD,cfgD]=await Promise.all([API.getCategorias().catch(()=>[]),user?API.getListas().catch(()=>[]):Promise.resolve([]),user?API.getConfig().catch(()=>({})):Promise.resolve({})]);
+  const loadCoreData=async()=>{try{const[cats,listasD,cfgD]=await Promise.all([API.getCategorias().catch(()=>[]),API.getListas().catch(()=>[]),API.getConfig().catch(()=>({}))]);
     setCategorias(Array.isArray(cats)?cats:[]);if(listasD.length)setListas(listasD.map((l,i)=>({...l,multiplicador:l.multiplicador||(1+(Number(l.porcentaje)||0)/100),modo:l.modo||"porcentaje",color:l.color||LISTA_COLORS[i%LISTA_COLORS.length]})));
     if(Object.keys(cfgD).length){setConfig(cfgD);setMantForm({activo:cfgD.mantenimiento_activo==="true",mensaje:cfgD.mantenimiento_mensaje||"",countdown:cfgD.mantenimiento_countdown||""});}
     if(user||vitrina)await loadProductos(1,"","");
-    if(isAdmin){const[pf,ords,usrs,pC,st]=await Promise.all([API.getPreciosFijos().catch(()=>[]),API.getPedidos().catch(()=>[]),API.getUsuarios().catch(()=>[]),API.getUsuariosPendientesCount().catch(()=>({count:0})),API.getStats().catch(()=>null)]);
+    if(isAdmin){const[pf,ords,usrs,pC,st]=await Promise.all([API.getPreciosFijos().catch(()=>[]),API.getPedidos({all:true}).catch(()=>[]),API.getUsuarios().catch(()=>[]),API.getUsuariosPendientesCount().catch(()=>({count:0})),API.getStats().catch(()=>null)]);
       setPreciosFijos(Array.isArray(pf)?pf:[]);setPedidos(Array.isArray(ords)?ords:[]);setUsuarios(Array.isArray(usrs)?usrs:[]);setPendientesCount(pC?.count||0);setStats(st);
     }else if(user){const[pf,ords]=await Promise.all([API.getPreciosFijos().catch(()=>[]),API.getPedidos().catch(()=>[])]);setPreciosFijos(Array.isArray(pf)?pf:[]);setPedidos(Array.isArray(ords)?ords:[]);}
     setDataReady(true);}catch(e){console.error(e);setDataReady(true);}};
@@ -508,10 +525,11 @@ export default function App(){
   // Expose setCart for ProductCard onBlur
   window.__ctx={setCart};
   window.__refreshPedidos=ords=>{setPedidos(Array.isArray(ords)?ords:[]);};
+  window.__exitVitrina=()=>{setVitrina(false);};
 
   const doLogin=async()=>{setLoginError("");try{const u=await API.login(loginUser.toLowerCase().trim(),loginPass);setUser(u);setLoginUser("");setLoginPass("");setView("catalog");}catch(e){setLoginError(e.pendiente?"Pendiente de aprobación.":(e.message||"Error"));}};
   const doRegister=async()=>{setRegError("");if(!regForm.nombre||!regForm.apellido||!regForm.usuario||!regForm.password||!regForm.telefono||!regForm.email){setRegError("Todos los campos son obligatorios");return;}
-    try{const r=await API.register({...regForm,nombre:`${regForm.nombre} ${regForm.apellido}`});setRegMsg(r.mensaje||"Enviado. El admin revisará tu cuenta.");setAuthMode("pendiente");
+    try{const r=await API.register({...regForm,nombre:`${regForm.nombre} ${regForm.apellido}`,nombre_fantasia:regForm.nombre_fantasia||""});setRegMsg(r.mensaje||"Enviado. El admin revisará tu cuenta.");setAuthMode("pendiente");
       const adminWa=config.whatsapp||"";if(adminWa){openWA(adminWa,`Hola, me registré en el catálogo:\nNombre: ${regForm.nombre} ${regForm.apellido}\nUsuario: ${regForm.usuario}\nTel: ${regForm.telefono}\nQuedo a la espera de aprobación`);}
     }catch(e){setRegError(e.message||"Error");}};
   const doLogout=()=>{API.logout();setUser(null);setVitrina(false);setCart([]);setView("catalog");setDataReady(false);setProductos([]);};
@@ -602,6 +620,7 @@ export default function App(){
           <div><label className="text-blue-200 text-xs font-medium mb-1 block">Contraseña *</label><input type="password" className="w-full px-4 py-3 bg-white/10 border border-white/10 rounded-xl text-white placeholder-blue-300/50 focus:outline-none focus:ring-2 focus:ring-blue-500" value={regForm.password} onChange={e=>setRegForm({...regForm,password:e.target.value})}/></div>
           <div><label className="text-blue-200 text-xs font-medium mb-1 block">Tel / WhatsApp *</label><input className="w-full px-4 py-3 bg-white/10 border border-white/10 rounded-xl text-white placeholder-blue-300/50 focus:outline-none focus:ring-2 focus:ring-blue-500" value={regForm.telefono} onChange={e=>setRegForm({...regForm,telefono:e.target.value})}/></div>
           <div><label className="text-blue-200 text-xs font-medium mb-1 block">Email *</label><input type="email" className="w-full px-4 py-3 bg-white/10 border border-white/10 rounded-xl text-white placeholder-blue-300/50 focus:outline-none focus:ring-2 focus:ring-blue-500" value={regForm.email} onChange={e=>setRegForm({...regForm,email:e.target.value})}/></div>
+          <div><label className="text-blue-200 text-xs font-medium mb-1 block">Nombre de fantasía <span className="text-blue-400">(opcional)</span></label><input className="w-full px-4 py-3 bg-white/10 border border-white/10 rounded-xl text-white placeholder-blue-300/50 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ej: Mi Negocio, Tecno Sur..." value={regForm.nombre_fantasia} onChange={e=>setRegForm({...regForm,nombre_fantasia:e.target.value})}/></div>
           {regError&&<p className="text-red-400 text-sm">{regError}</p>}
           <button onClick={doRegister} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl">Registrarme</button></div>}
         {authMode==="login"&&<div className="mt-6 pt-4 border-t border-white/10"><button onClick={()=>setVitrina(true)} className="w-full py-3 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 rounded-xl text-sm font-medium flex items-center justify-center gap-2"><Eye className="w-4 h-4"/>Vitrina Pública</button></div>}
@@ -726,7 +745,7 @@ export default function App(){
                 className="px-4 py-2 bg-emerald-100 text-emerald-700 rounded-xl text-sm font-medium flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>Excel</button></div>
             {usuarios.filter(u=>u.estado==="pendiente").length>0&&<div className="mb-4"><h4 className="text-sm font-bold text-amber-700 mb-2"><Clock className="w-4 h-4 inline mr-1"/>Pendientes</h4>
               {usuarios.filter(u=>u.estado==="pendiente").map(u=><div key={u.id} className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl p-3 mb-2">
-                <div><p className="font-semibold text-sm">{u.nombre}</p><p className="text-xs text-slate-500">@{u.usuario} {u.telefono?`• ${u.telefono}`:""}</p></div>
+                <div><p className="font-semibold text-sm">{u.nombre}{u.nombre_fantasia?<span className="text-xs text-blue-600 ml-1">({u.nombre_fantasia})</span>:""}</p><p className="text-xs text-slate-500">@{u.usuario} {u.telefono?`• ${u.telefono}`:""}</p></div>
                 <button onClick={()=>setEditUser(u)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium">Revisar</button></div>)}</div>}
             {usuarios.filter(u=>u.estado!=="pendiente").map(u=>{const activo=u.activo!==false&&u.activo!=="false";return<div key={u.id} className={`flex items-center justify-between border rounded-xl p-3 mb-2 ${activo?"bg-white":"bg-red-50 border-red-200"}`}>
               <div><p className="font-semibold text-sm flex items-center gap-1.5">{u.nombre} <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activo?"bg-emerald-100 text-emerald-700":"bg-red-100 text-red-600"}`}>{activo?"activo":"suspendido"}</span>
