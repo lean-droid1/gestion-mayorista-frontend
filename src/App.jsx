@@ -207,24 +207,23 @@ function TierModal({tier,isNew,onClose}){
 /* ── Order Detail Modal (with editing) ── */
 function OrderDetailModal({order,onClose,onUpdate,onPrint,onClone}){
   const{userLista,pfMap,showToast,usuarios:allUsers,isAdmin}=useContext(Ctx);
-  const o=order;if(!o)return null;
-  const orderNum=typeof o.id==="number"?`#${String(o.id).padStart(4,"0")}`:`#${o.id}`;
   const[editing,setEditing]=useState(false);
   const[items,setItems]=useState([]);
   const[addSearch,setAddSearch]=useState("");
   const[searchResults,setSearchResults]=useState([]);
   const[saving,setSaving]=useState(false);
   const[loadingItems,setLoadingItems]=useState(true);
-  const editTotal=items.reduce((s,i)=>s+(Number(i.precio_unitario)||0)*(i.qty||0),0);
-  const itemName=i=>i.nombre_producto||(i.categoria&&i.modelo?`${i.categoria} - ${i.modelo}`:i.modelo||"Producto");
-  // Load full pedido with items on mount
-  useEffect(()=>{(async()=>{try{setLoadingItems(true);const full=await API.getPedido(o.id);setItems((full.items||[]).map(i=>({...i,qty:i.cantidad||i.qty||1})));}catch(e){console.error(e);}setLoadingItems(false);})();},[o.id]);
-  // Search products via API for order editing
   const searchTimer=useRef(null);
+  const o=order;
+  useEffect(()=>{if(!o)return;(async()=>{try{setLoadingItems(true);const full=await API.getPedido(o.id);setItems((full.items||[]).map(i=>({...i,qty:i.cantidad||i.qty||1})));}catch(e){console.error(e);}setLoadingItems(false);})();},[o?.id]);
   useEffect(()=>{if(addSearch.length<2){setSearchResults([]);return;}
     if(searchTimer.current)clearTimeout(searchTimer.current);
     searchTimer.current=setTimeout(async()=>{try{const r=await API.getProductos({q:addSearch,limit:10});setSearchResults(r.productos||r.data||r||[]);}catch{setSearchResults([]);}},400);
     return()=>clearTimeout(searchTimer.current);},[addSearch]);
+  if(!o)return null;
+  const orderNum=typeof o.id==="number"?`#${String(o.id).padStart(4,"0")}`:`#${o.id}`;
+  const editTotal=items.reduce((s,i)=>s+(Number(i.precio_unitario)||0)*(i.qty||0),0);
+  const itemName=i=>i.nombre_producto||(i.categoria&&i.modelo?`${i.categoria} - ${i.modelo}`:i.modelo||"Producto");
 
   const saveEdit=async()=>{setSaving(true);try{
     const newItems=items.map(i=>({producto_id:i.producto_id||i.id,categoria:i.categoria,modelo:i.modelo,nombre_producto:`${i.categoria} - ${i.modelo}`,cantidad:i.qty,precio_unitario:Number(i.precio_unitario)||0,precio_base:Number(i.precio_base)||0}));
@@ -391,6 +390,49 @@ function AccountPanel({user,userLista,config,doLogout}){
       {config.info_envios&&<div className="bg-slate-50 rounded-xl p-3"><p className="text-xs font-bold text-slate-500 mb-1">Envíos</p><p className="text-sm text-slate-700 whitespace-pre-wrap">{config.info_envios}</p></div>}</div>}
     <button onClick={doLogout} className="w-full mt-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium flex items-center justify-center gap-2"><LogOut className="w-4 h-4"/>Cerrar sesión</button>
   </div></div>);
+}
+
+/* ═══════════════════════════════════════════════════
+   EXTRACTED COMPONENTS (hooks must live in real components, not IIFEs)
+   ═══════════════════════════════════════════════════ */
+function OrdersTabPanel({pedidos,refreshAdmin,exportOrders,orderFilter,setOrderFilter,setViewOrder}){
+  const[ordTab,setOrdTab]=useState(localStorage.getItem("gm_ordtab")||"pedidos");
+  const changeOrdTab=t=>{setOrdTab(t);localStorage.setItem("gm_ordtab",t);if(t==="archivados")refreshAdmin({archivado:true});else refreshAdmin();};
+  const tabs=[{id:"pedidos",label:"📦 Pedidos",color:"blue"},{id:"presupuestos",label:"📋 Presupuestos",color:"amber"},{id:"cancelados",label:"❌ Cancelados",color:"red"},{id:"archivados",label:"🗃 Archivados",color:"slate"}];
+  const filtered=pedidos.filter(o=>{
+    if(ordTab==="pedidos")return o.tipo!=="presupuesto"&&o.estado!=="cancelado";
+    if(ordTab==="presupuestos")return o.tipo==="presupuesto"&&o.estado!=="cancelado";
+    if(ordTab==="cancelados")return o.estado==="cancelado";
+    if(ordTab==="archivados")return true;return true;});
+  return<div>
+    <div className="flex gap-1.5 mb-3 overflow-x-auto">{tabs.map(t=><button key={t.id} onClick={()=>changeOrdTab(t.id)}
+      className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap ${ordTab===t.id?`bg-${t.color}-600 text-white`:`bg-${t.color}-100 text-${t.color}-700`}`}>{t.label}</button>)}
+      <button onClick={exportOrders} className="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-xl text-xs font-medium flex items-center gap-1 ml-auto shrink-0"><Download className="w-3 h-3"/>Excel</button></div>
+    {ordTab==="pedidos"&&<div className="flex gap-1 overflow-x-auto mb-3">{["all","pendiente","preparando","listo","entregado"].map(s=><button key={s} onClick={()=>setOrderFilter(s)}
+      className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap ${orderFilter===s?"bg-blue-600 text-white":"bg-slate-100 text-slate-600"}`}>{s==="all"?"Todos":s}</button>)}</div>}
+    <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+      {filtered.filter(o=>ordTab!=="pedidos"||orderFilter==="all"||o.estado===orderFilter).map(o=>{
+        const orderNum=typeof o.id==="number"?`#${String(o.id).padStart(4,"0")}`:`#${o.id}`;
+        return<div key={o.id} className={`bg-white border rounded-xl p-3 cursor-pointer hover:shadow-md ${o.tipo==="presupuesto"?"border-amber-300":""}`} onClick={()=>setViewOrder(o)}>
+          <div className="flex justify-between items-start">
+            <div><p className="font-semibold text-sm">{orderNum} — {o.usuario_nombre||o.cliente_nombre||"—"}</p>
+              <p className="text-xs text-slate-500">{new Date(o.fecha||o.created_at).toLocaleString("es-AR")} • {o.tipo_entrega==="retiro"?"Retiro":"Envío"}</p></div>
+            <div className="text-right"><p className="font-bold text-blue-600">{fmt(o.total)}</p>
+              {o.tipo==="presupuesto"?<span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">Presupuesto</span>:<StatusBadge status={o.estado}/>}</div></div>
+          <p className="text-xs text-slate-400 mt-1">{o.item_count||0} productos{o.metodo_pago?` • 💳 ${o.metodo_pago}`:""}</p></div>;})}
+      {filtered.filter(o=>ordTab!=="pedidos"||orderFilter==="all"||o.estado===orderFilter).length===0&&<p className="text-center text-slate-400 py-8 text-sm">Sin {ordTab}</p>}
+    </div></div>;
+}
+
+function PriceHistoryPanel(){
+  const[hist,setHist]=useState(null);const[showHist,setShowHist]=useState(false);
+  return<div className="bg-white border rounded-xl p-4"><button onClick={async()=>{if(!showHist){try{const h=await API.getHistorialPrecios();setHist(h);}catch{}}setShowHist(!showHist);}}
+    className="w-full text-left font-semibold text-sm flex items-center justify-between"><span><FileText className="w-4 h-4 inline mr-1"/>Historial de precios</span><ChevronDown className={`w-4 h-4 transition-transform ${showHist?"rotate-180":""}`}/></button>
+    {showHist&&<div className="mt-3 max-h-60 overflow-y-auto space-y-1">{(hist||[]).length===0?<p className="text-xs text-slate-400">Sin cambios registrados</p>
+      :hist.map(h=><div key={h.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-1.5 text-xs">
+        <div className="truncate flex-1"><span className="font-medium">{h.categoria} - {h.modelo}</span></div>
+        <span className="text-red-500 mx-1">{fmt(h.precio_anterior)}</span><span>→</span><span className="text-emerald-600 mx-1">{fmt(h.precio_nuevo)}</span>
+        <span className="text-slate-400 ml-2 shrink-0">{h.usuario_nombre} • {new Date(h.created_at).toLocaleDateString("es-AR")}</span></div>)}</div>}</div>;
 }
 
 /* ═══════════════════════════════════════════════════
@@ -697,33 +739,7 @@ export default function App(){
                 <span className="text-sm font-bold text-blue-600">{fmt(c.total)} <span className="text-xs text-slate-400 font-normal">({c.pedidos})</span></span></div>)}</div>}
           </div>}
 
-          {adminTab==="orders"&&(()=>{
-            const[ordTab,setOrdTab]=useState(localStorage.getItem("gm_ordtab")||"pedidos");
-            const changeOrdTab=t=>{setOrdTab(t);localStorage.setItem("gm_ordtab",t);if(t==="archivados")refreshAdmin({archivado:true});else refreshAdmin();};
-            const tabs=[{id:"pedidos",label:"📦 Pedidos",color:"blue"},{id:"presupuestos",label:"📋 Presupuestos",color:"amber"},{id:"cancelados",label:"❌ Cancelados",color:"red"},{id:"archivados",label:"🗃 Archivados",color:"slate"}];
-            const filtered=pedidos.filter(o=>{
-              if(ordTab==="pedidos")return o.tipo!=="presupuesto"&&o.estado!=="cancelado";
-              if(ordTab==="presupuestos")return o.tipo==="presupuesto"&&o.estado!=="cancelado";
-              if(ordTab==="cancelados")return o.estado==="cancelado";
-              if(ordTab==="archivados")return true;return true;});
-            return<div>
-              <div className="flex gap-1.5 mb-3 overflow-x-auto">{tabs.map(t=><button key={t.id} onClick={()=>changeOrdTab(t.id)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap ${ordTab===t.id?`bg-${t.color}-600 text-white`:`bg-${t.color}-100 text-${t.color}-700`}`}>{t.label}</button>)}
-                <button onClick={exportOrders} className="px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-xl text-xs font-medium flex items-center gap-1 ml-auto shrink-0"><Download className="w-3 h-3"/>Excel</button></div>
-              {ordTab==="pedidos"&&<div className="flex gap-1 overflow-x-auto mb-3">{["all","pendiente","preparando","listo","entregado"].map(s=><button key={s} onClick={()=>setOrderFilter(s)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap ${orderFilter===s?"bg-blue-600 text-white":"bg-slate-100 text-slate-600"}`}>{s==="all"?"Todos":s}</button>)}</div>}
-              <div className="space-y-2 max-h-[60vh] overflow-y-auto">
-                {filtered.filter(o=>ordTab!=="pedidos"||orderFilter==="all"||o.estado===orderFilter).map(o=>{
-                  const orderNum=typeof o.id==="number"?`#${String(o.id).padStart(4,"0")}`:`#${o.id}`;
-                  return<div key={o.id} className={`bg-white border rounded-xl p-3 cursor-pointer hover:shadow-md ${o.tipo==="presupuesto"?"border-amber-300":""}`} onClick={()=>setViewOrder(o)}>
-                    <div className="flex justify-between items-start">
-                      <div><p className="font-semibold text-sm">{orderNum} — {o.usuario_nombre||o.cliente_nombre||"—"}</p>
-                        <p className="text-xs text-slate-500">{new Date(o.fecha||o.created_at).toLocaleString("es-AR")} • {o.tipo_entrega==="retiro"?"Retiro":"Envío"}</p></div>
-                      <div className="text-right"><p className="font-bold text-blue-600">{fmt(o.total)}</p>
-                        {o.tipo==="presupuesto"?<span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">Presupuesto</span>:<StatusBadge status={o.estado}/>}</div></div>
-                    <p className="text-xs text-slate-400 mt-1">{o.item_count||0} productos{o.metodo_pago?` • 💳 ${o.metodo_pago}`:""}</p></div>;})}
-                {filtered.filter(o=>ordTab!=="pedidos"||orderFilter==="all"||o.estado===orderFilter).length===0&&<p className="text-center text-slate-400 py-8 text-sm">Sin {ordTab}</p>}
-              </div></div>;})()}
+          {adminTab==="orders"&&<OrdersTabPanel pedidos={pedidos} refreshAdmin={refreshAdmin} exportOrders={exportOrders} orderFilter={orderFilter} setOrderFilter={setOrderFilter} setViewOrder={setViewOrder}/>}
 
           {adminTab==="tiers"&&<div>
             <button onClick={()=>setEditTier("new")} className="mb-3 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium flex items-center gap-1.5"><Plus className="w-4 h-4"/>Nueva lista</button>
@@ -752,14 +768,7 @@ export default function App(){
               <div className="space-y-1">{stats.stockBajo.map(p=><div key={p.id} className="flex items-center justify-between bg-amber-50 rounded-lg px-3 py-2">
                 <span className="text-sm truncate flex-1">{p.categoria} - {p.modelo}</span><span className="text-xs font-bold text-red-600">{p.stock}/{p.stock_minimo}</span></div>)}</div></div>}
             {/* Historial de precios */}
-            {(()=>{const[hist,setHist]=useState(null);const[showHist,setShowHist]=useState(false);
-              return<div className="bg-white border rounded-xl p-4"><button onClick={async()=>{if(!showHist){try{const h=await API.getHistorialPrecios();setHist(h);}catch{}}setShowHist(!showHist);}}
-                className="w-full text-left font-semibold text-sm flex items-center justify-between"><span><FileText className="w-4 h-4 inline mr-1"/>Historial de precios</span><ChevronDown className={`w-4 h-4 transition-transform ${showHist?"rotate-180":""}`}/></button>
-                {showHist&&<div className="mt-3 max-h-60 overflow-y-auto space-y-1">{(hist||[]).length===0?<p className="text-xs text-slate-400">Sin cambios registrados</p>
-                  :hist.map(h=><div key={h.id} className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-1.5 text-xs">
-                    <div className="truncate flex-1"><span className="font-medium">{h.categoria} - {h.modelo}</span></div>
-                    <span className="text-red-500 mx-1">{fmt(h.precio_anterior)}</span><span>→</span><span className="text-emerald-600 mx-1">{fmt(h.precio_nuevo)}</span>
-                    <span className="text-slate-400 ml-2 shrink-0">{h.usuario_nombre} • {new Date(h.created_at).toLocaleDateString("es-AR")}</span></div>)}</div>}</div>;})()}
+            <PriceHistoryPanel/>
           </div>}
 
           {adminTab==="config"&&<ConfigPanel/>}
