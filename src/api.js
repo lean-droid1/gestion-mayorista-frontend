@@ -234,6 +234,10 @@ export async function rechazarUsuario(id) {
   return api(`/api/usuarios/${id}/rechazar`, { method: 'POST' });
 }
 
+export async function suspenderUsuario(id, activo) {
+  return api(`/api/usuarios/${id}/suspender`, { method: 'PUT', body: JSON.stringify({ activo }) });
+}
+
 export async function deleteUsuario(id) {
   return api(`/api/usuarios/${id}`, { method: 'DELETE' });
 }
@@ -246,6 +250,7 @@ export async function getPedidos(params = {}) {
   if (params.tipo) qs.set('tipo', params.tipo);
   if (params.archivado) qs.set('archivado', 'true');
   if (params.cancelados) qs.set('cancelados', 'true');
+  if (params.all) qs.set('all', 'true');
   const suffix = qs.toString() ? `?${qs}` : '';
   return api(`/api/pedidos${suffix}`);
 }

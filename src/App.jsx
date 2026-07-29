@@ -1,5 +1,5 @@
 import React,{useState,useEffect,useMemo,useCallback,useRef,memo,createContext,useContext}from"react";
-import{Search,ShoppingCart,User,LogOut,Package,Settings,Eye,EyeOff,Edit2,Trash2,Plus,Minus,Phone,Truck,Store,Users,DollarSign,AlertTriangle,Check,X,Menu,Filter,ClipboardList,Save,ChevronDown,ChevronRight,RefreshCw,UserPlus,Clock,Shield,BarChart3,Loader2,ArrowLeft,Percent,Upload,Printer,Download,Share2,TrendingUp,Mail,MapPin,FileText,Zap,CreditCard}from"lucide-react";
+import{Search,ShoppingCart,User,LogOut,Package,Settings,Eye,EyeOff,Edit2,Trash2,Plus,Minus,Phone,Truck,Store,Users,DollarSign,AlertTriangle,Check,X,Menu,Filter,ClipboardList,Save,ChevronDown,ChevronRight,RefreshCw,UserPlus,Clock,Shield,BarChart3,Loader2,ArrowLeft,Percent,Upload,Printer,Download,Share2,TrendingUp,Mail,MapPin,FileText,Zap,CreditCard,Ban}from"lucide-react";
 import*as XLSX from"xlsx";
 import QRCode from"qrcode";
 import*as API from"./api";
@@ -365,9 +365,9 @@ function ConfigPanel(){
 function AccountPanel({user,userLista,config,doLogout}){
   const{showToast}=useContext(Ctx);
   const[editing,setEditing]=useState(false);
-  const[f,setF]=useState({nombre:user.nombre||"",telefono:user.telefono||"",email:user.email||"",direccion:user.direccion||""});
+  const[f,setF]=useState({nombre:user.nombre||"",usuario:user.usuario||"",telefono:user.telefono||"",email:user.email||"",direccion:user.direccion||""});
   const[pw,setPw]=useState("");const[sv,setSv]=useState(false);
-  const saveProfile=async()=>{setSv(true);try{const d={...f};if(pw)d.password=pw;await API.updateMe(d);showToast("Datos actualizados");setEditing(false);setPw("");}catch(e){showToast("Error: "+e.message);}setSv(false);};
+  const saveProfile=async()=>{setSv(true);try{const d={...f};if(pw)d.password=pw;await API.updateMe(d);showToast("Datos actualizados — si cambiaste usuario o contraseña, reingresá");setEditing(false);setPw("");}catch(e){showToast("Error: "+e.message);}setSv(false);};
   return(<div className="p-4 max-w-md mx-auto"><div className="bg-white rounded-2xl border p-6">
     <div className="text-center"><div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3"><User className="w-8 h-8 text-blue-600"/></div>
       <h3 className="font-bold text-lg">{user.nombre}</h3><p className="text-sm text-slate-500">@{user.usuario}</p>
@@ -379,6 +379,7 @@ function AccountPanel({user,userLista,config,doLogout}){
       <button onClick={()=>setEditing(true)} className="w-full mt-3 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl font-medium text-sm flex items-center justify-center gap-2"><Edit2 className="w-4 h-4"/>Editar mis datos</button>
     </div>:<div className="mt-4 space-y-2 text-left">
       <input className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Nombre" value={f.nombre} onChange={e=>setF({...f,nombre:e.target.value})}/>
+      <input className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Usuario (login)" value={f.usuario} onChange={e=>setF({...f,usuario:e.target.value})}/>
       <input className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Teléfono / WhatsApp" value={f.telefono} onChange={e=>setF({...f,telefono:e.target.value})}/>
       <input type="email" className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Email" value={f.email} onChange={e=>setF({...f,email:e.target.value})}/>
       <input className="w-full px-3 py-2.5 border rounded-xl text-sm" placeholder="Dirección" value={f.direccion} onChange={e=>setF({...f,direccion:e.target.value})}/>
@@ -493,7 +494,7 @@ export default function App(){
   const loadProductos=useCallback(async(pg=1,q="",cat="")=>{setLoading(true);try{const r=await API.getProductos({q:q||undefined,categoria:cat||undefined,page:pg,limit:pageSize});
     setProductos(r.productos||r.data||r||[]);setTotalProductos(r.total??0);setPage(pg);}catch(e){console.error(e);}setLoading(false);},[pageSize]);
 
-  const refreshAdmin=useCallback(async(opts={})=>{if(!isAdmin)return;try{const[usrs,ords,pf,pC,st]=await Promise.all([API.getUsuarios(),API.getPedidos(opts.archivado?{archivado:true}:{}),API.getPreciosFijos(),API.getUsuariosPendientesCount(),API.getStats()]);
+  const refreshAdmin=useCallback(async(opts={})=>{if(!isAdmin)return;try{const[usrs,ords,pf,pC,st]=await Promise.all([API.getUsuarios(),API.getPedidos(opts.archivado?{archivado:true}:{all:true}),API.getPreciosFijos(),API.getUsuariosPendientesCount(),API.getStats()]);
     setUsuarios(Array.isArray(usrs)?usrs:[]);setPedidos(Array.isArray(ords)?ords:[]);setPreciosFijos(Array.isArray(pf)?pf:[]);setPendientesCount(pC?.count||0);setStats(st);}catch(e){showToast("Error: "+e.message);}},[isAdmin,showToast]);
 
   useEffect(()=>{if(searchTimer.current)clearTimeout(searchTimer.current);searchTimer.current=setTimeout(()=>setSearchDebounced(search),400);return()=>clearTimeout(searchTimer.current);},[search]);
@@ -555,7 +556,7 @@ export default function App(){
   const exportOrders=()=>{const rows=[];pedidos.forEach(o=>(o.items||[]).forEach(i=>{rows.push({Pedido:o.id,Fecha:new Date(o.fecha||o.created_at).toLocaleDateString("es-AR"),Cliente:o.usuario_nombre,Producto:i.categoria+" - "+i.modelo,Cantidad:i.cantidad||i.qty,Precio:i.precio_unitario,Subtotal:(Number(i.precio_unitario)||0)*(i.cantidad||i.qty),Total:o.total,Estado:o.estado});}));
     const ws=XLSX.utils.json_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Pedidos");XLSX.writeFile(wb,"pedidos.xlsx");showToast("Excel descargado");};
 
-  const updateOrder=async(id,data)=>{try{await API.updatePedido(id,data);const ords=await API.getPedidos().catch(()=>[]);setPedidos(Array.isArray(ords)?ords:[]);showToast("Actualizado");
+  const updateOrder=async(id,data)=>{try{await API.updatePedido(id,data);const ords=await API.getPedidos({all:true}).catch(()=>[]);setPedidos(Array.isArray(ords)?ords:[]);showToast("Actualizado");
     if(viewOrder?.id===id)setViewOrder(prev=>({...prev,...data}));
     // WhatsApp automático al cambiar estado
     if(data.estado&&config.whatsapp){const o=pedidos.find(p=>p.id===id)||viewOrder;if(o){const tel=o.usuario_telefono||o.cliente_telefono;if(tel){const num=tel.replace(/\D/g,"");const n=num.startsWith("54")?num:`54${num}`;const orderNum=`#${String(id).padStart(4,"0")}`;
@@ -732,8 +733,12 @@ export default function App(){
                 {u.rol==="subadmin"&&<span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">sub-admin</span>}</p>
                 <p className="text-xs text-slate-500">@{u.usuario} • {u.rol==="admin"?"Admin":listas.find(l=>l.id===u.lista_precio_id)?.nombre||""}</p></div>
               <div className="flex gap-1"><button onClick={()=>setEditUser(u)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200"><Edit2 className="w-3.5 h-3.5"/></button>
-                {u.rol!=="admin"&&<button onClick={async(ev)=>{ev.stopPropagation();if(!confirm(`¿Eliminar ${u.nombre}?`))return;try{await API.deleteUsuario(u.id);setUsuarios(prev=>prev.filter(x=>x.id!==u.id));showToast("Eliminado");setTimeout(()=>refreshAdmin(),500);}catch(err){showToast("Error: "+err.message);}}}
-                  className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-500"><Trash2 className="w-3.5 h-3.5"/></button>}</div></div>})}            {clientRanking.length>0&&<div className="mt-6"><h4 className="text-sm font-bold text-slate-700 mb-2"><TrendingUp className="w-4 h-4 inline mr-1"/>Ranking</h4>
+                {u.rol!=="admin"&&<>{activo?<button title="Suspender" onClick={async(ev)=>{ev.stopPropagation();if(!confirm(`¿Suspender ${u.nombre}?`))return;try{await API.suspenderUsuario(u.id,false);showToast("Suspendido");refreshAdmin();}catch(err){showToast("Error: "+err.message);}}}
+                  className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-600"><Ban className="w-3.5 h-3.5"/></button>
+                  :<button title="Reactivar" onClick={async(ev)=>{ev.stopPropagation();try{await API.suspenderUsuario(u.id,true);showToast("Reactivado");refreshAdmin();}catch(err){showToast("Error: "+err.message);}}}
+                  className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-600"><Check className="w-3.5 h-3.5"/></button>}
+                  <button title="Eliminar definitivamente" onClick={async(ev)=>{ev.stopPropagation();if(!confirm(`¿Eliminar definitivamente a ${u.nombre}? Sus pedidos se mantendrán en las estadísticas.`))return;try{await API.deleteUsuario(u.id);showToast("Eliminado");refreshAdmin();}catch(err){showToast("Error: "+err.message);}}}
+                  className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-500"><Trash2 className="w-3.5 h-3.5"/></button></>}</div></div>})}            {clientRanking.length>0&&<div className="mt-6"><h4 className="text-sm font-bold text-slate-700 mb-2"><TrendingUp className="w-4 h-4 inline mr-1"/>Ranking</h4>
               {clientRanking.slice(0,10).map((c,i)=><div key={c.nombre} className="flex items-center justify-between bg-white border rounded-lg p-2 mb-1">
                 <span className="text-sm"><span className="font-bold text-slate-400 mr-2">#{i+1}</span>{c.nombre}</span>
                 <span className="text-sm font-bold text-blue-600">{fmt(c.total)} <span className="text-xs text-slate-400 font-normal">({c.pedidos})</span></span></div>)}</div>}
