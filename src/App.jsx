@@ -48,13 +48,13 @@ const ProductCard=memo(function ProductCard({p}){
 
 /* ── Edit Product ── */
 function EditProductModal({product,onClose}){
-  const{listas,preciosFijos,showToast,loadProductos,page,searchDebounced,catFilter,setPreciosFijos}=useContext(Ctx);const p=product;
+  const{listas,preciosFijos,showToast,loadProductos,page,searchDebounced,catFilter,setPreciosFijos,reloadAdminProds}=useContext(Ctx);const p=product;
   const[stk,setStk]=useState(p.stock||0);const[stkMin,setStkMin]=useState(p.stock_minimo||0);const[img,setImg]=useState(p.imagen||"");const[pb,setPb]=useState(p.precio_base||0);
   const[modelo,setModelo]=useState(p.modelo||"");const[notas,setNotas]=useState(p.notas||"");const[compat,setCompat]=useState(p.compatibilidad||"");const[sv,setSv]=useState(false);
   const[fp,setFp]=useState(()=>{const o={};preciosFijos.filter(x=>x.producto_id===p.id).forEach(x=>{o[x.lista_precio_id]=x.precio_fijo});return o;});
   const save=async()=>{setSv(true);try{await API.updateProducto(p.id,{stock:parseInt(stk)||0,stock_minimo:parseInt(stkMin)||0,imagen:img,precio_base:parseFloat(pb)||p.precio_base,modelo,notas,compatibilidad:compat});
     for(const l of listas){const v=fp[l.id];await API.setPrecioFijo(p.id,l.id,v&&v>0?v:0).catch(()=>{});}
-    await loadProductos(page,searchDebounced,catFilter);const pf=await API.getPreciosFijos().catch(()=>[]);setPreciosFijos(Array.isArray(pf)?pf:[]);onClose();showToast("Actualizado");
+    await loadProductos(page,searchDebounced,catFilter);reloadAdminProds();const pf=await API.getPreciosFijos().catch(()=>[]);setPreciosFijos(Array.isArray(pf)?pf:[]);onClose();showToast("Actualizado");
   }catch(e){showToast("Error: "+e.message);}setSv(false);};
   return(<div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center" onClick={e=>e.target===e.currentTarget&&onClose()}>
     <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[90vh] overflow-y-auto">
@@ -480,6 +480,8 @@ export default function App(){
   const[regError,setRegError]=useState("");const[regMsg,setRegMsg]=useState("");
   const[mantForm,setMantForm]=useState({activo:false,mensaje:"",countdown:""});
   const[expandedCat,setExpandedCat]=useState("");
+  const[allProds,setAllProds]=useState([]);const[adminProdSearch,setAdminProdSearch]=useState("");
+  const[userSearch,setUserSearch]=useState("");
   const searchTimer=useRef(null);const isAdmin=user?.rol==="admin";
 
   const pfMap=useMemo(()=>{const m={};preciosFijos.forEach(pf=>{m[`${pf.producto_id}_${pf.lista_precio_id}`]=pf.precio_fijo});return m;},[preciosFijos]);
@@ -514,6 +516,7 @@ export default function App(){
   const refreshAdmin=useCallback(async(opts={})=>{if(!isAdmin)return;try{const[usrs,ords,pf,pC,st]=await Promise.all([API.getUsuarios(),API.getPedidos(opts.archivado?{archivado:true}:{all:true}),API.getPreciosFijos(),API.getUsuariosPendientesCount(),API.getStats()]);
     setUsuarios(Array.isArray(usrs)?usrs:[]);setPedidos(Array.isArray(ords)?ords:[]);setPreciosFijos(Array.isArray(pf)?pf:[]);setPendientesCount(pC?.count||0);setStats(st);}catch(e){showToast("Error: "+e.message);}},[isAdmin,showToast]);
 
+  useEffect(()=>{if(adminTab==="products"&&isAdmin){API.getProductos({limit:9999}).then(r=>setAllProds(r.productos||r.data||r||[])).catch(()=>{});}},[adminTab,isAdmin]);
   useEffect(()=>{if(searchTimer.current)clearTimeout(searchTimer.current);searchTimer.current=setTimeout(()=>setSearchDebounced(search),400);return()=>clearTimeout(searchTimer.current);},[search]);
   useEffect(()=>{if(!dataReady)return;setCatFilter("");setBrandFilter("");loadProductos(1,searchDebounced,"");},[searchDebounced]);
   useEffect(()=>{if(!dataReady)return;loadProductos(1,searchDebounced,catFilter);},[catFilter,pageSize]);
@@ -588,8 +591,9 @@ export default function App(){
 
   const clientRanking=useMemo(()=>{const m={};pedidos.filter(o=>o.estado!=="cancelado").forEach(o=>{const k=o.usuario_nombre||"?";if(!m[k])m[k]={nombre:k,total:0,pedidos:0};m[k].total+=Number(o.total)||0;m[k].pedidos++;});return Object.values(m).sort((a,b)=>b.total-a.total);},[pedidos]);
 
+  const reloadAdminProds=useCallback(()=>{API.getProductos({limit:9999}).then(r=>setAllProds(r.productos||r.data||r||[])).catch(()=>{});},[]);
   const ctxVal=useMemo(()=>({userLista,pfMap,cart,setCart,addToCart,isAdmin,setEditProduct,dolarBlue,showToast,listas,setListas,preciosFijos,setPreciosFijos,
-    loadProductos,page,searchDebounced,catFilter,categorias,setCategorias,refreshAdmin,config,setConfig,mantForm,setMantForm,productos,vitrina,usuarios}),[userLista,pfMap,cart,addToCart,isAdmin,dolarBlue,listas,preciosFijos,page,searchDebounced,catFilter,categorias,config,mantForm,productos,vitrina,usuarios]);
+    loadProductos,page,searchDebounced,catFilter,categorias,setCategorias,refreshAdmin,config,setConfig,mantForm,setMantForm,productos,vitrina,usuarios,reloadAdminProds}),[userLista,pfMap,cart,addToCart,isAdmin,dolarBlue,listas,preciosFijos,page,searchDebounced,catFilter,categorias,config,mantForm,productos,vitrina,usuarios,reloadAdminProds]);
 
   const[darkMode,setDarkMode]=useState(()=>localStorage.getItem("darkMode")==="true");
   const toggleDark=useCallback(()=>{const v=!darkMode;setDarkMode(v);localStorage.setItem("darkMode",v?"true":"false");},[darkMode]);
@@ -716,17 +720,21 @@ export default function App(){
           {adminTab==="products"&&<div className="space-y-3">
             <div className="flex gap-2 flex-wrap"><button onClick={()=>setAddProdModal(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium flex items-center gap-1.5"><Plus className="w-4 h-4"/>Agregar</button>
               <button onClick={()=>setImportModal(true)} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium flex items-center gap-1.5"><Upload className="w-4 h-4"/>Excel</button></div>
-            {/* Price adjustment */}
             <PriceAdjustPanel/>
-            <div className="bg-white border rounded-xl overflow-hidden"><h4 className="font-semibold text-sm p-3 border-b">Categorías → Productos</h4>
-              <div className="max-h-[50vh] overflow-y-auto">{categorias.map(cat=>{const prods=productos.filter(p=>p.categoria===cat);const isExp=expandedCat===cat;
+            <div className="bg-white border rounded-xl overflow-hidden"><div className="p-3 border-b space-y-2">
+              <h4 className="font-semibold text-sm">Categorías → Productos <span className="text-xs text-slate-400 font-normal">({allProds.length} total)</span></h4>
+              <div className="relative"><Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input className="w-full pl-9 pr-8 py-2 border rounded-xl text-sm" placeholder="Buscar producto, modelo, categoría..." value={adminProdSearch} onChange={e=>setAdminProdSearch(e.target.value)}/>
+                {adminProdSearch&&<button onClick={()=>setAdminProdSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="w-4 h-4"/></button>}</div></div>
+              {(()=>{const fp=adminProdSearch?allProds.filter(p=>(p.modelo||"").toLowerCase().includes(adminProdSearch.toLowerCase())||(p.categoria||"").toLowerCase().includes(adminProdSearch.toLowerCase())||(p.compatibilidad||"").toLowerCase().includes(adminProdSearch.toLowerCase())):allProds;
+                const cats=adminProdSearch?[...new Set(fp.map(p=>p.categoria))].sort():categorias;
+                return<div className="max-h-[50vh] overflow-y-auto">{cats.map(cat=>{const prods=fp.filter(p=>p.categoria===cat);const isExp=expandedCat===cat;
                 return<div key={cat}><button onClick={()=>setExpandedCat(isExp?"":cat)} className="w-full flex items-center justify-between px-3 py-2 hover:bg-slate-50 border-b border-slate-50">
                   <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{backgroundColor:getCatColor(cat)}}/><span className="text-sm font-medium">{cat}</span></div>
                   <div className="flex items-center gap-2"><span className="text-xs text-slate-400">{prods.length}</span>{isExp?<ChevronDown className="w-3.5 h-3.5"/>:<ChevronRight className="w-3.5 h-3.5"/>}</div></button>
                   {isExp&&<div className="bg-slate-50">{prods.map(p=><div key={p.id} className="flex items-center justify-between px-4 py-1.5 border-b border-slate-100 text-sm">
                     <span className="truncate flex-1">{p.modelo}</span><span className="text-xs text-slate-400 mx-2">{fmt(p.precio_base)}</span>
                     <button onClick={()=>setEditProduct(p)} className="p-1 rounded bg-white hover:bg-slate-200"><Edit2 className="w-3 h-3"/></button></div>)}
-                    {!prods.length&&<p className="px-4 py-2 text-xs text-slate-400">Sin productos</p>}</div>}</div>;})}</div></div>
+                    {!prods.length&&<p className="px-4 py-2 text-xs text-slate-400">Sin productos</p>}</div>}</div>;})}</div>;})()}</div>
             <div className="bg-white border border-red-200 rounded-xl p-4 space-y-3"><h4 className="font-semibold text-sm text-red-600 flex items-center gap-2 mb-2"><AlertTriangle className="w-4 h-4"/>Peligro</h4>
               <div className="flex gap-2 flex-wrap items-end">
                 <div className="flex-1"><label className="text-xs text-slate-500 mb-1 block">Borrar categoría</label>
@@ -738,26 +746,33 @@ export default function App(){
               </div></div></div>}
 
           {adminTab==="users"&&<div>
-            <div className="flex gap-2 mb-3"><button onClick={()=>setNewUserModal(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium flex items-center gap-1.5"><UserPlus className="w-4 h-4"/>Nuevo</button>
+            <div className="flex gap-2 mb-3 flex-wrap"><button onClick={()=>setNewUserModal(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium flex items-center gap-1.5"><UserPlus className="w-4 h-4"/>Nuevo</button>
               <button onClick={refreshAdmin} className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl text-sm font-medium flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5"/>Actualizar</button>
               <button onClick={()=>{const rows=usuarios.filter(u=>u.rol!=="admin").map(u=>({Nombre:u.nombre,Usuario:u.usuario,Telefono:u.telefono,Email:u.email,Direccion:u.direccion,Lista:listas.find(l=>l.id===u.lista_precio_id)?.nombre||"",Estado:u.estado,Notas:u.notas_admin||""}));
                 const ws=XLSX.utils.json_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Clientes");XLSX.writeFile(wb,"clientes.xlsx");showToast("Excel descargado");}}
                 className="px-4 py-2 bg-emerald-100 text-emerald-700 rounded-xl text-sm font-medium flex items-center gap-1.5"><Download className="w-3.5 h-3.5"/>Excel</button></div>
-            {usuarios.filter(u=>u.estado==="pendiente").length>0&&<div className="mb-4"><h4 className="text-sm font-bold text-amber-700 mb-2"><Clock className="w-4 h-4 inline mr-1"/>Pendientes</h4>
-              {usuarios.filter(u=>u.estado==="pendiente").map(u=><div key={u.id} className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl p-3 mb-2">
+            <div className="relative mb-3"><Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input className="w-full pl-9 pr-8 py-2.5 border rounded-xl text-sm" placeholder="Buscar por nombre, usuario o fantasía..." value={userSearch} onChange={e=>setUserSearch(e.target.value)}/>
+              {userSearch&&<button onClick={()=>setUserSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><X className="w-4 h-4"/></button>}</div>
+            {(()=>{const filt=u=>!userSearch||[u.nombre,u.usuario,u.nombre_fantasia].some(f=>(f||"").toLowerCase().includes(userSearch.toLowerCase()));
+            return<>
+            {usuarios.filter(u=>u.estado==="pendiente"&&filt(u)).length>0&&<div className="mb-4"><h4 className="text-sm font-bold text-amber-700 mb-2"><Clock className="w-4 h-4 inline mr-1"/>Pendientes</h4>
+              {usuarios.filter(u=>u.estado==="pendiente"&&filt(u)).map(u=><div key={u.id} className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl p-3 mb-2">
                 <div><p className="font-semibold text-sm">{u.nombre}{u.nombre_fantasia?<span className="text-xs text-blue-600 ml-1">({u.nombre_fantasia})</span>:""}</p><p className="text-xs text-slate-500">@{u.usuario} {u.telefono?`• ${u.telefono}`:""}</p></div>
                 <button onClick={()=>setEditUser(u)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium">Revisar</button></div>)}</div>}
-            {usuarios.filter(u=>u.estado!=="pendiente").map(u=>{const activo=u.activo!==false&&u.activo!=="false";return<div key={u.id} className={`flex items-center justify-between border rounded-xl p-3 mb-2 ${activo?"bg-white":"bg-red-50 border-red-200"}`}>
+            {usuarios.filter(u=>u.estado!=="pendiente"&&filt(u)).map(u=>{const activo=u.activo!==false&&u.activo!=="false";return<div key={u.id} className={`flex items-center justify-between border rounded-xl p-3 mb-2 ${activo?"bg-white":"bg-red-50 border-red-200"}`}>
               <div><p className="font-semibold text-sm flex items-center gap-1.5">{u.nombre} <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activo?"bg-emerald-100 text-emerald-700":"bg-red-100 text-red-600"}`}>{activo?"activo":"suspendido"}</span>
                 {u.rol==="subadmin"&&<span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">sub-admin</span>}</p>
                 <p className="text-xs text-slate-500">@{u.usuario} • {u.rol==="admin"?"Admin":listas.find(l=>l.id===u.lista_precio_id)?.nombre||""}</p></div>
               <div className="flex gap-1"><button onClick={()=>setEditUser(u)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200"><Edit2 className="w-3.5 h-3.5"/></button>
-                {u.rol!=="admin"&&<>{activo?<button title="Suspender" onClick={async(ev)=>{ev.stopPropagation();if(!confirm(`¿Suspender ${u.nombre}?`))return;try{await API.suspenderUsuario(u.id,false);showToast("Suspendido");refreshAdmin();}catch(err){showToast("Error: "+err.message);}}}
+                {u.rol!=="admin"&&<><button title="Resetear contraseña" onClick={async(ev)=>{ev.stopPropagation();if(!confirm(`¿Resetear contraseña de ${u.nombre} a "1234"?`))return;try{await API.resetPassword(u.id);showToast("Contraseña reseteada a 1234");
+                  const tel=u.telefono?.replace(/\D/g,"")||"";if(tel){const n=tel.startsWith("54")?tel:`54${tel}`;openWA(n,`Hola ${u.nombre}, tu contraseña fue reseteada.\n\nTu usuario es: *${u.usuario}*\nTu nueva contraseña es: *1234*\n\nPodés cambiarla desde tu perfil una vez que ingreses.`);}}catch(err){showToast("Error: "+err.message);}}}
+                  className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600"><Zap className="w-3.5 h-3.5"/></button>
+                {activo?<button title="Suspender" onClick={async(ev)=>{ev.stopPropagation();if(!confirm(`¿Suspender ${u.nombre}?`))return;try{await API.suspenderUsuario(u.id,false);showToast("Suspendido");refreshAdmin();}catch(err){showToast("Error: "+err.message);}}}
                   className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-600"><Ban className="w-3.5 h-3.5"/></button>
                   :<button title="Reactivar" onClick={async(ev)=>{ev.stopPropagation();try{await API.suspenderUsuario(u.id,true);showToast("Reactivado");refreshAdmin();}catch(err){showToast("Error: "+err.message);}}}
                   className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-600"><Check className="w-3.5 h-3.5"/></button>}
                   <button title="Eliminar definitivamente" onClick={async(ev)=>{ev.stopPropagation();if(!confirm(`¿Eliminar definitivamente a ${u.nombre}? Sus pedidos se mantendrán en las estadísticas.`))return;try{await API.deleteUsuario(u.id);showToast("Eliminado");refreshAdmin();}catch(err){showToast("Error: "+err.message);}}}
-                  className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-500"><Trash2 className="w-3.5 h-3.5"/></button></>}</div></div>})}            {clientRanking.length>0&&<div className="mt-6"><h4 className="text-sm font-bold text-slate-700 mb-2"><TrendingUp className="w-4 h-4 inline mr-1"/>Ranking</h4>
+                  className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-500"><Trash2 className="w-3.5 h-3.5"/></button></>}</div></div>})}</>})()}            {clientRanking.length>0&&<div className="mt-6"><h4 className="text-sm font-bold text-slate-700 mb-2"><TrendingUp className="w-4 h-4 inline mr-1"/>Ranking</h4>
               {clientRanking.slice(0,10).map((c,i)=><div key={c.nombre} className="flex items-center justify-between bg-white border rounded-lg p-2 mb-1">
                 <span className="text-sm"><span className="font-bold text-slate-400 mr-2">#{i+1}</span>{c.nombre}</span>
                 <span className="text-sm font-bold text-blue-600">{fmt(c.total)} <span className="text-xs text-slate-400 font-normal">({c.pedidos})</span></span></div>)}</div>}

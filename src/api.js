@@ -242,6 +242,10 @@ export async function deleteUsuario(id) {
   return api(`/api/usuarios/${id}`, { method: 'DELETE' });
 }
 
+export async function resetPassword(id) {
+  return api(`/api/usuarios/${id}/reset-password`, { method: 'POST' });
+}
+
 // ══════════════════════════════════════
 // PEDIDOS
 // ══════════════════════════════════════
